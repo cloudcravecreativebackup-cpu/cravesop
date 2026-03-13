@@ -13,13 +13,16 @@ interface TaskBoardProps {
   onEditTask: (task: StaffTask) => void;
   onAddComment: (taskId: string, commentText: string) => void;
   onUpdateTaskStatus: (taskId: string, status: TaskStatus, feedback?: string) => void;
+  highlightTaskId?: string | null;
+  onHighlightClear?: () => void;
 }
 
 type BoardView = 'deliverables' | 'people' | 'brands' | 'performance' | 'reports';
 type TimeRange = 'Today' | 'This Week' | 'This Month' | 'This Year' | 'All Time';
 
 const TaskBoard: React.FC<TaskBoardProps> = ({ 
-  tasks, users, brands, workspace, currentUser, onEditTask, onAddComment, onUpdateTaskStatus
+  tasks, users, brands, workspace, currentUser, onEditTask, onAddComment, onUpdateTaskStatus,
+  highlightTaskId, onHighlightClear
 }) => {
   const terminology = workspace.config.clientTerminology;
   const terminologyPlural = workspace.config.clientTerminologyPlural;
@@ -38,6 +41,17 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const [commentText, setCommentText] = useState<string>('');
   const [replyToName, setReplyToName] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const highlightedTaskRef = useRef<HTMLTableRowElement>(null);
+
+  React.useEffect(() => {
+    if (highlightTaskId) {
+      setExpandedTaskId(highlightTaskId);
+      setTimeout(() => {
+        highlightedTaskRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (onHighlightClear) onHighlightClear();
+      }, 500);
+    }
+  }, [highlightTaskId, onHighlightClear]);
 
   const getTimeForRange = (task: StaffTask, range: TimeRange): number => {
     if (!task.timeEntries) return 0;
@@ -324,11 +338,12 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                 return (
                   <React.Fragment key={task.id}>
                     <tr 
+                      ref={highlightTaskId === task.id ? highlightedTaskRef : null}
                       onClick={() => {
                         setExpandedTaskId(isExpanded ? null : task.id);
                         setIsInputActive(false);
                       }}
-                      className={`group hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all cursor-pointer ${isExpanded ? 'bg-slate-50/30 dark:bg-white/5' : ''}`}
+                      className={`group hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all cursor-pointer ${isExpanded ? 'bg-slate-50/30 dark:bg-white/5' : ''} ${highlightTaskId === task.id ? 'ring-2 ring-brand-blue ring-inset' : ''}`}
                     >
                       <td className="px-8 py-6">
                         <div className="flex items-center gap-4">

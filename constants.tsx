@@ -1,7 +1,19 @@
 
 import { StaffTask, User, Organization, Brand, Service } from './types';
 
-export const ORGS: Organization[] = [];
+export const ORGS: Organization[] = [
+  { 
+    id: 'org-cloudcrave', 
+    name: 'CloudCrave Solutions', 
+    slug: 'cloudcrave', 
+    createdAt: '2024-11-20T00:00:00Z',
+    tenantId: 'tenant-cc-001',
+    config: {
+      clientTerminology: 'Brand',
+      clientTerminologyPlural: 'Brands'
+    }
+  }
+];
 
 export const DEFAULT_SERVICES: Service[] = [
   {
@@ -52,8 +64,21 @@ export const DEFAULT_SERVICES: Service[] = [
   }
 ];
 
-export const BRANDS: Brand[] = [];
+export const BRANDS: Brand[] = [
+  { id: 'b-cc-001', orgId: 'org-cloudcrave', name: 'CloudCrave Internal', services: ['General Operations'] },
+  { id: 'b-cc-002', orgId: 'org-cloudcrave', name: 'Switch2Tech', services: ['Switch2Tech Training', 'Digital Solutions'] }
+];
 
-export const USERS: User[] = [];
+export const USERS: User[] = [
+  { 
+    id: 'u-root', 
+    orgId: 'org-cloudcrave', 
+    name: 'System Root', 
+    email: 'support@cloudcraves.com', 
+    password: 'admin', 
+    role: 'Admin', 
+    registrationStatus: 'approved' 
+  }
+];
 
 export const MOCK_TASKS: StaffTask[] = [];

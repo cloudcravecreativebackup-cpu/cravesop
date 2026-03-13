@@ -3,6 +3,8 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { StaffTask, ManagementSummary, User, TaskComment, Notification, Organization, Brand, ServiceType, TaskCategory, Frequency, TaskType, TaskStatus, ContentCalendar, CalendarEntry, Service } from './types';
 import { MOCK_TASKS, USERS, ORGS, BRANDS, DEFAULT_SERVICES } from './constants';
 import { analyzeTasks } from './services/geminiService';
+import { supabaseService } from './services/supabaseService';
+import { emailService } from './services/emailService';
 import Dashboard from './components/Dashboard';
 import TaskEntryForm from './components/TaskEntryForm';
 import TaskBoard from './components/TaskBoard';
@@ -12,11 +14,12 @@ import BrandManagement from './components/BrandManagement';
 import BrandDetailView from './components/BrandDetailView';
 import Logo from './components/Logo';
 import NotificationsPanel from './components/NotificationsPanel';
+import NotificationAudit from './components/NotificationAudit';
 import MentorshipHub from './components/MentorshipHub';
 import PersonnelProtocolView from './components/PersonnelProtocolView';
 import ContentCalendarView from './components/ContentCalendarView';
 
-type AppView = 'board' | 'analysis' | 'users' | 'squad' | 'personnel-detail' | 'brands' | 'brand-detail' | 'calendar';
+type AppView = 'board' | 'analysis' | 'users' | 'squad' | 'personnel-detail' | 'brands' | 'brand-detail' | 'calendar' | 'notification-audit';
 
 const STORAGE_KEY_ORGS = 'craveops_cloudcraves_orgs_v2';
 const STORAGE_KEY_USERS = 'craveops_cloudcraves_users_v2';
@@ -65,6 +68,9 @@ const App: React.FC = () => {
   const [newlyProvisionedTenantId, setNewlyProvisionedTenantId] = useState<string | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
+  const [supabaseError, setSupabaseError] = useState<string | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   
   const [organizations, setOrganizations] = useState<Organization[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_ORGS);
@@ -108,6 +114,137 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : MOCK_TASKS;
   });
 
+  // Initial Data Sync from Supabase
+  useEffect(() => {
+    const initSupabase = async () => {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('placeholder')) {
+        setIsInitialLoading(false);
+        return;
+      }
+
+      try {
+        const [dbOrgs, dbUsers, dbBrands, dbTasks, dbServices, dbCalendars, dbNotifs] = await Promise.all([
+          supabaseService.getOrganizations(),
+          supabaseService.getUsers(),
+          supabaseService.getBrands(),
+          supabaseService.getTasks(),
+          supabaseService.getServices(),
+          supabaseService.getCalendars(),
+          supabaseService.getNotifications()
+        ]);
+
+        if (dbOrgs.length > 0) setOrganizations(dbOrgs);
+        if (dbUsers.length > 0) setUsers(dbUsers);
+        if (dbBrands.length > 0) setBrands(dbBrands);
+        if (dbTasks.length > 0) setTasks(dbTasks);
+        if (dbServices.length > 0) setServices(dbServices);
+        if (dbCalendars.length > 0) setCalendars(dbCalendars);
+        if (dbNotifs.length > 0) setNotifications(dbNotifs);
+        
+        setIsSupabaseConnected(true);
+      } catch (err: any) {
+        console.error('Supabase Sync Error:', err);
+        setSupabaseError(err.message || 'Connection failed');
+      } finally {
+        setIsInitialLoading(false);
+      }
+    };
+
+    initSupabase();
+
+    // Real-time Subscriptions
+    const taskSub = supabaseService.subscribeToChanges('tasks', (payload) => {
+      if (payload.eventType === 'INSERT') {
+        const newTask = {
+          ...payload.new,
+          orgId: payload.new.org_id,
+          brandId: payload.new.brand_id,
+          serviceType: payload.new.service_type,
+          taskTitle: payload.new.task_title,
+          taskDescription: payload.new.task_description,
+          dueDate: payload.new.due_date,
+          progressUpdate: payload.new.progress_update,
+          estimatedHours: payload.new.estimated_hours,
+          hoursSpent: payload.new.hours_spent,
+          reportingPeriod: payload.new.reporting_period,
+          relatedCalendarId: payload.new.related_calendar_id,
+          relatedCalendarEntryId: payload.new.related_calendar_entry_id
+        };
+        setTasks(prev => {
+          if (prev.find(t => t.id === newTask.id)) return prev;
+          return [newTask, ...prev];
+        });
+      } else if (payload.eventType === 'UPDATE') {
+        const updatedTask = {
+          ...payload.new,
+          orgId: payload.new.org_id,
+          brandId: payload.new.brand_id,
+          serviceType: payload.new.service_type,
+          taskTitle: payload.new.task_title,
+          taskDescription: payload.new.task_description,
+          dueDate: payload.new.due_date,
+          progressUpdate: payload.new.progress_update,
+          estimatedHours: payload.new.estimated_hours,
+          hoursSpent: payload.new.hours_spent,
+          reportingPeriod: payload.new.reporting_period,
+          relatedCalendarId: payload.new.related_calendar_id,
+          relatedCalendarEntryId: payload.new.related_calendar_entry_id
+        };
+        setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+      } else if (payload.eventType === 'DELETE') {
+        setTasks(prev => prev.filter(t => t.id !== payload.old.id));
+      }
+    });
+
+    const userSub = supabaseService.subscribeToChanges('users', (payload) => {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        const newUser = {
+          ...payload.new,
+          createdAt: payload.new.created_at,
+          orgId: payload.new.org_id,
+          registrationStatus: payload.new.registration_status,
+          mentorId: payload.new.mentor_id,
+          weeklyCapacityHours: payload.new.weekly_capacity_hours
+        };
+        setUsers(prev => {
+          const exists = prev.find(u => u.id === newUser.id);
+          if (exists) return prev.map(u => u.id === newUser.id ? newUser : u);
+          return [...prev, newUser];
+        });
+      } else if (payload.eventType === 'DELETE') {
+        setUsers(prev => prev.filter(u => u.id !== payload.old.id));
+      }
+    });
+
+    const notifSub = supabaseService.subscribeToChanges('notifications', (payload) => {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        const newNotif = {
+          ...payload.new,
+          orgId: payload.new.org_id,
+          userId: payload.new.user_id,
+          relatedTaskId: payload.new.related_task_id,
+          relatedUserId: payload.new.related_user_id
+        };
+        setNotifications(prev => {
+          const exists = prev.find(n => n.id === newNotif.id);
+          if (exists) return prev.map(n => n.id === newNotif.id ? newNotif : n);
+          return [newNotif, ...prev];
+        });
+      } else if (payload.eventType === 'DELETE') {
+        setNotifications(prev => prev.filter(n => n.id !== payload.old.id));
+      }
+    });
+
+    return () => {
+      taskSub.unsubscribe();
+      userSub.unsubscribe();
+      notifSub.unsubscribe();
+    };
+  }, []);
+
   const [view, setView] = useState<AppView>('board');
   const [selectedPersonnelId, setSelectedPersonnelId] = useState<string | null>(null);
   const [selectedBrandDetailId, setSelectedBrandDetailId] = useState<string | null>(null);
@@ -115,6 +252,8 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [editingTask, setEditingTask] = useState<StaffTask | null>(null);
   const [isAddingTask, setIsAddingTask] = useState<boolean>(false);
+  const [highlightUserId, setHighlightUserId] = useState<string | null>(null);
+  const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
 
   const currentOrg = useMemo(() => 
     organizations.find(o => o.id === currentUser?.orgId), 
@@ -137,6 +276,7 @@ const App: React.FC = () => {
     if (!currentUser) return [];
     if (currentUser.role === 'Admin') return users.filter(u => u.orgId === currentUser.orgId);
     if (currentUser.role === 'Staff Lead') {
+      // Staff Leads see themselves and their mentees
       return users.filter(u => 
         u.orgId === currentUser.orgId && 
         (u.id === currentUser.id || u.mentorId === currentUser.id)
@@ -148,8 +288,7 @@ const App: React.FC = () => {
   const visibleBrands = useMemo(() => {
     if (!currentUser) return [];
     const orgBrands = brands.filter(b => b.orgId === currentUser.orgId);
-    if (currentUser.role === 'Admin') return orgBrands;
-    if (currentUser.role === 'Staff Lead') return orgBrands.filter(b => b.leadId === currentUser.id);
+    if (currentUser.role === 'Admin' || currentUser.role === 'Staff Lead') return orgBrands;
     const brandIds = new Set(tasks.filter(t => t.staffName === currentUser.name).map(t => t.brandId));
     return orgBrands.filter(b => brandIds.has(b.id));
   }, [brands, currentUser, tasks]);
@@ -221,7 +360,27 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEY_CALENDARS, JSON.stringify(calendars));
     localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
     localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(notifications));
-  }, [organizations, brands, tasks, services, calendars, users, notifications]);
+
+    if (isSupabaseConnected) {
+      // Background sync to Supabase
+      const syncToSupabase = async () => {
+        try {
+          await Promise.allSettled([
+            ...organizations.map(o => supabaseService.saveOrganization(o)),
+            ...users.map(u => supabaseService.saveUser(u)),
+            ...brands.map(b => supabaseService.saveBrand(b)),
+            ...tasks.map(t => supabaseService.saveTask(t)),
+            ...services.map(s => supabaseService.saveService(s)),
+            ...calendars.map(c => supabaseService.saveCalendar(c)),
+            ...notifications.map(n => supabaseService.saveNotification(n))
+          ]);
+        } catch (err) {
+          console.error('Supabase Background Sync Error:', err);
+        }
+      };
+      syncToSupabase();
+    }
+  }, [organizations, brands, tasks, services, calendars, users, notifications, isSupabaseConnected]);
 
   useEffect(() => {
     if (currentUser) {
@@ -231,7 +390,7 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  const createNotification = (userId: string, type: Notification['type'], message: string, relatedTaskId?: string, relatedUserId?: string) => {
+  const createNotification = async (userId: string, type: Notification['type'], message: string, relatedTaskId?: string, relatedUserId?: string) => {
     if (!currentUser) return;
     const newNotif: Notification = {
       id: Math.random().toString(36).substr(2, 9),
@@ -244,7 +403,22 @@ const App: React.FC = () => {
       relatedTaskId,
       relatedUserId
     };
-    setNotifications(prev => [newNotif, ...prev]);
+    
+    try {
+      await supabaseService.saveNotification(newNotif);
+      
+      // Email Integration
+      const targetUser = users.find(u => u.id === userId);
+      if (targetUser && targetUser.email) {
+        await emailService.sendEmail(
+          targetUser.email,
+          `CraveSOP Notification: ${type.toUpperCase()}`,
+          `Hello ${targetUser.name},\n\n${message}\n\nView details in the app: ${window.location.origin}`
+        );
+      }
+    } catch (err) {
+      console.error('Failed to save notification:', err);
+    }
   };
 
   const notifyAdmins = (type: Notification['type'], message: string, relatedTaskId?: string, relatedUserId?: string) => {
@@ -263,6 +437,22 @@ const App: React.FC = () => {
     setShowNotifs(false);
     if (newView !== 'personnel-detail') setSelectedPersonnelId(null);
     if (newView !== 'brand-detail') setSelectedBrandDetailId(null);
+    if (newView !== 'users') setHighlightUserId(null);
+  };
+
+  const handleNotificationClick = (n: Notification) => {
+    markNotifRead(n.id);
+    setShowNotifs(false);
+
+    if (n.relatedTaskId) {
+      setHighlightTaskId(n.relatedTaskId);
+      navigateTo('board');
+    } else if (n.relatedUserId) {
+      if (isAdminOrLead) {
+        setHighlightUserId(n.relatedUserId);
+        navigateTo('users');
+      }
+    }
   };
 
   const handleLogin = (email: string, password?: string) => {
@@ -276,7 +466,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRegister = (name: string, email: string, password?: string, companyName?: string, tenantId?: string): { error?: string; tenantId?: string } => {
+  const handleRegister = async (name: string, email: string, password?: string, companyName?: string, tenantId?: string): Promise<{ error?: string; tenantId?: string }> => {
     const emailLower = email.toLowerCase();
     const isWhitelisted = WHITELISTED_ADMINS.includes(emailLower);
     
@@ -297,52 +487,58 @@ const App: React.FC = () => {
           clientTerminologyPlural: 'Brands'
         }
       };
-      setOrganizations(prev => [...prev, newOrg]);
-      targetOrgId = newOrg.id;
-      finalTenantId = newOrg.tenantId;
+      
+      try {
+        await supabaseService.saveOrganization(newOrg);
+        targetOrgId = newOrg.id;
+        finalTenantId = newOrg.tenantId;
 
-      // Copy template services for the new workspace
-      const newServices: Service[] = DEFAULT_SERVICES.map(s => ({
-        ...s,
-        id: `s-${Math.random().toString(36).substr(2, 9)}`,
-        orgId: targetOrgId
-      }));
-      setServices(prev => [...prev, ...newServices]);
+        // Copy template services for the new workspace
+        const newServices: Service[] = DEFAULT_SERVICES.map(s => ({
+          ...s,
+          id: `s-${Math.random().toString(36).substr(2, 9)}`,
+          orgId: targetOrgId
+        }));
+        for (const s of newServices) await supabaseService.saveService(s);
 
-      // SEEDING: Create a default "Internal Operations" brand for the new org
-      const defaultBrand: Brand = {
-        id: `b-${Math.random().toString(36).substr(2, 9)}`,
-        orgId: targetOrgId,
-        name: 'Internal Operations',
-        services: ['General Operations'],
-        leadId: newUserId // Link to the new admin
-      };
-      setBrands(prev => [...prev, defaultBrand]);
-
-      // SEEDING: Create initial onboarding tasks
-      const onboardingTasks: StaffTask[] = [
-        {
-          id: `t-${Math.random().toString(36).substr(2, 9)}`,
+        // SEEDING: Create a default "Internal Operations" brand for the new org
+        const defaultBrand: Brand = {
+          id: `b-${Math.random().toString(36).substr(2, 9)}`,
           orgId: targetOrgId,
-          brandId: defaultBrand.id,
-          serviceType: 'General Operations',
-          staffName: name,
-          assignedBy: 'System',
-          taskTitle: 'Configure Workspace Settings',
-          taskDescription: 'Set up your company profile and invite your first Staff Lead.',
-          category: 'Strategic Planning',
-          type: 'One-time',
-          frequency: 'N/A',
-          status: 'Not Started',
-          dueDate: new Date(Date.now() + 86400000).toISOString(),
-          progressUpdate: '',
-          estimatedHours: 1,
-          hoursSpent: 0,
-          comments: [],
-          reportingPeriod: new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
-        }
-      ];
-      setTasks(prev => [...prev, ...onboardingTasks]);
+          name: 'Internal Operations',
+          services: ['General Operations'],
+          leadId: newUserId // Link to the new admin
+        };
+        await supabaseService.saveBrand(defaultBrand);
+
+        // SEEDING: Create initial onboarding tasks
+        const onboardingTasks: StaffTask[] = [
+          {
+            id: `t-${Math.random().toString(36).substr(2, 9)}`,
+            orgId: targetOrgId,
+            brandId: defaultBrand.id,
+            serviceType: 'General Operations',
+            staffName: name,
+            assignedBy: 'System',
+            taskTitle: 'Configure Workspace Settings',
+            taskDescription: 'Set up your company profile and invite your first Staff Lead.',
+            category: 'Strategic Planning',
+            type: 'One-time',
+            frequency: 'N/A',
+            status: 'Not Started',
+            dueDate: new Date(Date.now() + 86400000).toISOString(),
+            progressUpdate: '',
+            estimatedHours: 1,
+            hoursSpent: 0,
+            comments: [],
+            reportingPeriod: new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
+          }
+        ];
+        for (const t of onboardingTasks) await supabaseService.saveTask(t);
+      } catch (err) {
+        console.error('Failed to provision workspace:', err);
+        return { error: "Failed to provision workspace. Please try again." };
+      }
     } 
     // CASE B: Joining an Existing Unit
     else {
@@ -370,38 +566,34 @@ const App: React.FC = () => {
       registrationStatus 
     };
     
-    setUsers(prev => [...prev, newUser]);
-    
-    if (registrationStatus === 'pending') {
-      const targetOrgAdmins = users.filter(u => u.orgId === targetOrgId && (u.role === 'Admin' || u.role === 'Staff Lead'));
-      targetOrgAdmins.forEach(admin => {
-        const newNotif: Notification = {
-          id: Math.random().toString(36).substr(2, 9),
-          orgId: targetOrgId,
-          userId: admin.id,
-          type: 'warning',
-          message: `New Access Request: ${name} is waiting for authorization in your unit.`,
-          read: false,
-          timestamp: new Date().toISOString(),
-          relatedUserId: newUser.id
-        };
-        setNotifications(prev => [newNotif, ...prev]);
-      });
-      setShowRegSuccess(true);
-    } else {
-      // If it's a new provision, show them the success screen with the Tenant ID
-      if (companyName) {
-        setNewlyProvisionedTenantId(finalTenantId);
+    try {
+      await supabaseService.saveUser(newUser);
+      
+      if (registrationStatus === 'pending') {
+        const targetOrgAdmins = users.filter(u => u.orgId === targetOrgId && (u.role === 'Admin' || u.role === 'Staff Lead'));
+        for (const admin of targetOrgAdmins) {
+          await createNotification(admin.id, 'warning', `New Access Request: ${name} is waiting for authorization in your unit.`, undefined, newUser.id);
+        }
         setShowRegSuccess(true);
       } else {
-        setCurrentUser(newUser);
-        setIsLoggedIn(true);
+        // If it's a new provision, show them the success screen with the Tenant ID
+        if (companyName) {
+          setNewlyProvisionedTenantId(finalTenantId);
+          setShowRegSuccess(true);
+        } else {
+          setCurrentUser(newUser);
+          setIsLoggedIn(true);
+        }
       }
+      
+      return { tenantId: finalTenantId };
+    } catch (err) {
+      console.error('Failed to register user:', err);
+      return { error: "Registration failed. Please try again." };
     }
-    return { tenantId: finalTenantId }; 
   };
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     const userToDelete = users.find(u => u.id === userId);
     if (!userToDelete) return;
     
@@ -411,13 +603,19 @@ const App: React.FC = () => {
     }
 
     if (window.confirm(`CRITICAL: Are you sure you want to delete ${userToDelete.name}'s profile? Historical logs and deliverables will be preserved for audit reference.`)) {
-      setUsers(prev => prev
-        .filter(u => u.id !== userId)
-        .map(u => u.mentorId === userId ? { ...u, mentorId: undefined } : u)
-      );
-      notifyAdmins('warning', `Profile Decommissioned: ${userToDelete.name} removed from roster.`);
-      if (view === 'personnel-detail' && selectedPersonnelId === userId) {
-        navigateTo('users');
+      try {
+        await supabaseService.deleteUser(userId);
+        setUsers(prev => prev
+          .filter(u => u.id !== userId)
+          .map(u => u.mentorId === userId ? { ...u, mentorId: undefined } : u)
+        );
+        notifyAdmins('warning', `Profile Decommissioned: ${userToDelete.name} removed from roster.`);
+        if (view === 'personnel-detail' && selectedPersonnelId === userId) {
+          navigateTo('users');
+        }
+      } catch (err) {
+        console.error('Failed to delete user:', err);
+        alert('Failed to delete user. Please try again.');
       }
     }
   };
@@ -444,7 +642,7 @@ const App: React.FC = () => {
     }
   }, [visibleTasks]);
 
-  const handleAddComment = useCallback((taskId: string, commentText: string) => {
+  const handleAddComment = useCallback(async (taskId: string, commentText: string) => {
     if (!currentUser) return;
     const task = tenantTasks.find(t => t.id === taskId);
     if (!task) return;
@@ -455,42 +653,66 @@ const App: React.FC = () => {
       text: commentText,
       timestamp: new Date().toISOString()
     };
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, comments: [...t.comments, newComment] } : t));
     
-    const taskOwner = tenantUsers.find(u => u.name === task.staffName);
-    if (taskOwner && taskOwner.id !== currentUser.id) {
-      createNotification(taskOwner.id, 'info', `${currentUser.name} logged a comment on your deliverable: "${task.taskTitle}"`, taskId);
-    }
-
-    tenantUsers.forEach(u => {
-      if (commentText.includes(`@${u.name}`) && u.id !== currentUser.id) {
-        createNotification(u.id, 'success', `${currentUser.name} mentioned you in a log for "${task.taskTitle}"`, taskId);
+    const updatedTask = { ...task, comments: [...task.comments, newComment] };
+    
+    try {
+      await supabaseService.saveTask(updatedTask);
+      setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
+      
+      const taskOwner = tenantUsers.find(u => u.name === task.staffName);
+      if (taskOwner && taskOwner.id !== currentUser.id) {
+        await createNotification(taskOwner.id, 'info', `${currentUser.name} logged a comment on your deliverable: "${task.taskTitle}"`, taskId);
       }
-    });
 
-    notifyAdmins('info', `Log Update: ${currentUser.name} on "${task.taskTitle}"`, taskId);
+      for (const u of tenantUsers) {
+        if (commentText.includes(`@${u.name}`) && u.id !== currentUser.id) {
+          await createNotification(u.id, 'success', `${currentUser.name} mentioned you in a log for "${task.taskTitle}"`, taskId);
+        }
+      }
+
+      await notifyAdmins('info', `Log Update: ${currentUser.name} on "${task.taskTitle}"`, taskId);
+    } catch (err) {
+      console.error('Failed to add comment:', err);
+    }
   }, [currentUser, tenantTasks, tenantUsers]);
 
-  const handleTaskSubmit = (taskData: Partial<StaffTask>) => {
+  const handleTaskSubmit = async (taskData: Partial<StaffTask>) => {
     if (!currentUser) return;
     if (editingTask) {
       const wasCompleted = editingTask.status === 'Completed';
       const isCompleted = taskData.status === 'Completed';
       const isBlocked = taskData.status === 'Blocked';
 
-      setTasks(prev => prev.map(t => t.id === editingTask.id ? { ...t, ...taskData } as StaffTask : t));
-      
-      if (!wasCompleted && isCompleted) {
-        notifyAdmins('success', `Deliverable Finalized: ${editingTask.taskTitle} by ${editingTask.staffName}`, editingTask.id);
-      }
-      if (taskData.status === 'Pending Approval' && editingTask.status !== 'Pending Approval') {
-        notifyAdmins('info', `Deliverable Pending Approval: "${taskData.taskTitle || editingTask.taskTitle}" by ${taskData.staffName || editingTask.staffName}`, editingTask.id);
-      }
-      if (isBlocked) {
-        notifyAdmins('alert', `Blocker Alert: ${editingTask.taskTitle} is blocked by ${editingTask.staffName}`, editingTask.id);
-      }
+      const updatedTask = { ...editingTask, ...taskData } as StaffTask;
 
-      setEditingTask(null);
+      try {
+        await supabaseService.saveTask(updatedTask);
+        
+        // Check for re-assignment
+        if (taskData.staffName && taskData.staffName !== editingTask.staffName) {
+          const newUser = tenantUsers.find(u => u.name === taskData.staffName);
+          if (newUser && newUser.id !== currentUser.id) {
+            await createNotification(newUser.id, 'success', `Deliverable Re-assigned: "${taskData.taskTitle || editingTask.taskTitle}" is now your responsibility.`, editingTask.id);
+          }
+        }
+
+        setTasks(prev => prev.map(t => t.id === editingTask.id ? updatedTask : t));
+        
+        if (!wasCompleted && isCompleted) {
+          await notifyAdmins('success', `Deliverable Finalized: ${editingTask.taskTitle} by ${editingTask.staffName}`, editingTask.id);
+        }
+        if (taskData.status === 'Pending Approval' && editingTask.status !== 'Pending Approval') {
+          await notifyAdmins('info', `Deliverable Pending Approval: "${taskData.taskTitle || editingTask.taskTitle}" by ${taskData.staffName || editingTask.staffName}`, editingTask.id);
+        }
+        if (isBlocked) {
+          await notifyAdmins('alert', `Blocker Alert: ${editingTask.taskTitle} is blocked by ${editingTask.staffName}`, editingTask.id);
+        }
+
+        setEditingTask(null);
+      } catch (err) {
+        console.error('Failed to update task:', err);
+      }
     } else {
       const newTask: StaffTask = {
         id: Math.random().toString(36).substr(2, 9),
@@ -510,80 +732,96 @@ const App: React.FC = () => {
         estimatedHours: taskData.estimatedHours || 0,
         hoursSpent: taskData.hoursSpent || 0,
         comments: [],
-        reportingPeriod: 'Nov 2024'
+        reportingPeriod: new Date().toLocaleString('default', { month: 'short', year: 'numeric' })
       };
-      setTasks([newTask, ...tasks]);
-      setIsAddingTask(false);
+      
+      try {
+        await supabaseService.saveTask(newTask);
+        setTasks([newTask, ...tasks]);
+        setIsAddingTask(false);
 
-      const assignedUser = tenantUsers.find(u => u.name === newTask.staffName);
-      if (assignedUser && assignedUser.id !== currentUser.id) {
-        createNotification(assignedUser.id, 'success', `New Deliverable Assigned: "${newTask.taskTitle}" by ${currentUser.name}`, newTask.id);
+        const assignedUser = tenantUsers.find(u => u.name === newTask.staffName);
+        if (assignedUser && assignedUser.id !== currentUser.id) {
+          await createNotification(assignedUser.id, 'success', `New Deliverable Assigned: "${newTask.taskTitle}" by ${currentUser.name}`, newTask.id);
+        }
+
+        await notifyAdmins('info', `New deliverable provisioned for ${newTask.staffName}: ${newTask.taskTitle}`, newTask.id);
+      } catch (err) {
+        console.error('Failed to create task:', err);
       }
-
-      notifyAdmins('info', `New deliverable provisioned for ${newTask.staffName}: ${newTask.taskTitle}`, newTask.id);
     }
   };
 
-  const handleSaveCalendar = (cal: ContentCalendar) => {
+  const handleSaveCalendar = async (cal: ContentCalendar) => {
     if (!currentUser) return;
-    const existing = calendars.find(c => c.id === cal.id);
-    if (existing) {
-      setCalendars(prev => prev.map(c => c.id === cal.id ? cal : c));
-    } else {
-      setCalendars(prev => [...prev, cal]);
-    }
-
-    const newTasksFromCal: StaffTask[] = [];
-    cal.entries.forEach(entry => {
-      const existingTask = tasks.find(t => t.relatedCalendarEntryId === entry.id);
-      const assignedUser = tenantUsers.find(u => u.id === entry.assignedToId);
+    
+    try {
+      await supabaseService.saveCalendar(cal);
       
-      if (existingTask) {
-        setTasks(prev => prev.map(t => t.id === existingTask.id ? {
-          ...t,
-          staffName: assignedUser?.name || t.staffName,
-          taskTitle: `Calendar: ${entry.topic}`,
-          taskDescription: `Platforms: ${entry.platforms.join(', ')}\nType: ${entry.contentType}\n\nVisual Instructions: ${entry.visualRef}\n\nCaption/CTA: ${entry.caption}`,
-          dueDate: entry.date
-        } : t));
+      const existing = calendars.find(c => c.id === cal.id);
+      if (existing) {
+        setCalendars(prev => prev.map(c => c.id === cal.id ? cal : c));
       } else {
-        const newTask = {
-          id: `t-${Math.random().toString(36).substr(2, 9)}`,
-          orgId: currentUser.orgId,
-          brandId: cal.brandId,
-          serviceType: 'Social Media Management' as ServiceType,
-          staffName: assignedUser?.name || currentUser.name,
-          assignedBy: currentUser.name,
-          taskTitle: `Calendar: ${entry.topic}`,
-          taskDescription: `Platforms: ${entry.platforms.join(', ')}\nType: ${entry.contentType}\n\nVisual Instructions: ${entry.visualRef}\n\nCaption/CTA: ${entry.caption}`,
-          category: 'Content Optimisation' as TaskCategory,
-          type: 'One-time' as TaskType,
-          frequency: 'N/A' as Frequency,
-          status: 'Not Started' as TaskStatus,
-          dueDate: entry.date,
-          progressUpdate: '',
-          estimatedHours: 2, 
-          hoursSpent: 0,
-          comments: [],
-          reportingPeriod: 'Nov 2024',
-          relatedCalendarId: cal.id,
-          relatedCalendarEntryId: entry.id
-        };
-        newTasksFromCal.push(newTask);
+        setCalendars(prev => [...prev, cal]);
+      }
+
+      const newTasksFromCal: StaffTask[] = [];
+      for (const entry of cal.entries) {
+        const existingTask = tasks.find(t => t.relatedCalendarEntryId === entry.id);
+        const assignedUser = tenantUsers.find(u => u.id === entry.assignedToId);
         
-        if (assignedUser && assignedUser.id !== currentUser.id) {
-          createNotification(assignedUser.id, 'info', `Strategy Update: You have a new content slot assigned for "${entry.topic}"`, newTask.id);
+        if (existingTask) {
+          const updatedTask = {
+            ...existingTask,
+            staffName: assignedUser?.name || existingTask.staffName,
+            taskTitle: `Calendar: ${entry.topic}`,
+            taskDescription: `Platforms: ${entry.platforms.join(', ')}\nType: ${entry.contentType}\n\nVisual Instructions: ${entry.visualRef}\n\nCaption/CTA: ${entry.caption}`,
+            dueDate: entry.date
+          };
+          await supabaseService.saveTask(updatedTask);
+          setTasks(prev => prev.map(t => t.id === existingTask.id ? updatedTask : t));
+        } else {
+          const newTask: StaffTask = {
+            id: `t-${Math.random().toString(36).substr(2, 9)}`,
+            orgId: currentUser.orgId,
+            brandId: cal.brandId,
+            serviceType: 'Social Media Management',
+            staffName: assignedUser?.name || currentUser.name,
+            assignedBy: currentUser.name,
+            taskTitle: `Calendar: ${entry.topic}`,
+            taskDescription: `Platforms: ${entry.platforms.join(', ')}\nType: ${entry.contentType}\n\nVisual Instructions: ${entry.visualRef}\n\nCaption/CTA: ${entry.caption}`,
+            category: 'Content Optimisation',
+            type: 'One-time',
+            frequency: 'N/A',
+            status: 'Not Started',
+            dueDate: entry.date,
+            progressUpdate: '',
+            estimatedHours: 2,
+            hoursSpent: 0,
+            comments: [],
+            reportingPeriod: new Date(entry.date).toLocaleString('default', { month: 'short', year: 'numeric' }),
+            relatedCalendarId: cal.id,
+            relatedCalendarEntryId: entry.id
+          };
+          await supabaseService.saveTask(newTask);
+          newTasksFromCal.push(newTask);
+          
+          if (assignedUser && assignedUser.id !== currentUser.id) {
+            await createNotification(assignedUser.id, 'info', `Strategy Update: You have a new content slot assigned for "${entry.topic}"`, newTask.id);
+          }
         }
       }
-    });
 
-    if (newTasksFromCal.length > 0) {
-      setTasks(prev => [...newTasksFromCal, ...prev]);
+      if (newTasksFromCal.length > 0) {
+        setTasks(prev => [...newTasksFromCal, ...prev]);
+      }
+      await notifyAdmins('success', `Strategy Calendar synchronized: ${cal.name}`);
+    } catch (err) {
+      console.error('Failed to save calendar:', err);
     }
-    notifyAdmins('success', `Strategy Calendar synchronized: ${cal.name}`);
   };
 
-  const handleCreateBrand = (brandName: string, selectedServices: ServiceType[]) => {
+  const handleCreateBrand = async (brandName: string, selectedServices: ServiceType[]) => {
     if (!currentUser) return;
     const newBrand: Brand = {
       id: `b-${Math.random().toString(36).substr(2, 9)}`,
@@ -592,148 +830,115 @@ const App: React.FC = () => {
       services: selectedServices,
       leadId: currentUser.role === 'Staff Lead' ? currentUser.id : undefined
     };
-    setBrands(prev => [...prev, newBrand]);
+    
+    try {
+      await supabaseService.saveBrand(newBrand);
+      setBrands(prev => [...prev, newBrand]);
 
-    const autoTasks: StaffTask[] = [];
-    selectedServices.forEach(service => {
-      const templates = SERVICE_TEMPLATES[service] || [];
-      templates.forEach(tpl => {
-        autoTasks.push({
-          id: `t-${Math.random().toString(36).substr(2, 9)}`,
-          orgId: currentUser.orgId,
-          brandId: newBrand.id,
-          serviceType: service,
-          staffName: currentUser.name,
-          assignedBy: currentUser.name,
-          taskTitle: tpl.taskTitle,
-          taskDescription: `Automatic deliverable initialization for ${service}.`,
-          category: tpl.category,
-          type: tpl.type,
-          frequency: tpl.frequency,
-          status: 'Not Started',
-          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          progressUpdate: '',
-          estimatedHours: 1,
-          hoursSpent: 0,
-          comments: [],
-          reportingPeriod: 'Nov 2024'
-        });
-      });
-    });
-    setTasks(prev => [...autoTasks, ...prev]);
-    notifyAdmins('success', `New brand pipeline provisioned: ${brandName}`);
+      const autoTasks: StaffTask[] = [];
+      for (const service of selectedServices) {
+        const templates = SERVICE_TEMPLATES[service] || [];
+        for (const tpl of templates) {
+          const newTask: StaffTask = {
+            id: `t-${Math.random().toString(36).substr(2, 9)}`,
+            orgId: currentUser.orgId,
+            brandId: newBrand.id,
+            serviceType: service,
+            staffName: currentUser.name,
+            assignedBy: currentUser.name,
+            taskTitle: tpl.taskTitle,
+            taskDescription: `Automatic deliverable initialization for ${service}.`,
+            category: tpl.category,
+            type: tpl.type,
+            frequency: tpl.frequency,
+            status: 'Not Started',
+            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            progressUpdate: '',
+            estimatedHours: 1,
+            hoursSpent: 0,
+            comments: [],
+            reportingPeriod: new Date().toLocaleString('default', { month: 'short', year: 'numeric' })
+          };
+          await supabaseService.saveTask(newTask);
+          autoTasks.push(newTask);
+        }
+      }
+      setTasks(prev => [...autoTasks, ...prev]);
+      await notifyAdmins('success', `New brand pipeline provisioned: ${brandName}`);
+    } catch (err) {
+      console.error('Failed to create brand:', err);
+    }
   };
 
-  const handleUpdateBrand = (brandId: string, updates: Partial<Brand>) => {
+  const handleUpdateBrand = async (brandId: string, updates: Partial<Brand>) => {
     const oldBrand = brands.find(b => b.id === brandId);
-    setBrands(prev => prev.map(b => b.id === brandId ? { ...b, ...updates } : b));
+    if (!oldBrand || !currentUser) return;
+
+    const updatedBrand = { ...oldBrand, ...updates };
     
-    // If services were updated, check for new ones to provision tasks
-    if (updates.services && oldBrand && currentUser) {
-      const newServices = updates.services.filter(s => !oldBrand.services.includes(s));
-      if (newServices.length > 0) {
-        const autoTasks: StaffTask[] = [];
-        newServices.forEach(service => {
-          const templates = SERVICE_TEMPLATES[service] || [];
-          templates.forEach(tpl => {
-            autoTasks.push({
-              id: `t-${Math.random().toString(36).substr(2, 9)}`,
-              orgId: currentUser.orgId,
-              brandId: brandId,
-              serviceType: service,
-              staffName: currentUser.name,
-              assignedBy: currentUser.name,
-              taskTitle: tpl.taskTitle,
-              taskDescription: `Automatic deliverable initialization for ${service}.`,
-              category: tpl.category,
-              type: tpl.type,
-              frequency: tpl.frequency,
-              status: 'Not Started',
-              dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-              progressUpdate: '',
-              estimatedHours: 1,
-              hoursSpent: 0,
-              comments: [],
-              reportingPeriod: 'Nov 2024'
-            });
-          });
-        });
-        if (autoTasks.length > 0) {
+    try {
+      await supabaseService.saveBrand(updatedBrand);
+      setBrands(prev => prev.map(b => b.id === brandId ? updatedBrand : b));
+      
+      if (updates.services) {
+        const newServices = updates.services.filter(s => !oldBrand.services.includes(s));
+        if (newServices.length > 0) {
+          const autoTasks: StaffTask[] = [];
+          for (const service of newServices) {
+            const templates = SERVICE_TEMPLATES[service] || [];
+            for (const tpl of templates) {
+              const newTask: StaffTask = {
+                id: `t-${Math.random().toString(36).substr(2, 9)}`,
+                orgId: currentUser.orgId,
+                brandId: brandId,
+                serviceType: service,
+                staffName: currentUser.name,
+                assignedBy: currentUser.name,
+                taskTitle: tpl.taskTitle,
+                taskDescription: `Automatic deliverable initialization for ${service}.`,
+                category: tpl.category,
+                type: tpl.type,
+                frequency: tpl.frequency,
+                status: 'Not Started',
+                dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                progressUpdate: '',
+                estimatedHours: 1,
+                hoursSpent: 0,
+                comments: [],
+                reportingPeriod: new Date().toLocaleString('default', { month: 'short', year: 'numeric' })
+              };
+              await supabaseService.saveTask(newTask);
+              autoTasks.push(newTask);
+            }
+          }
           setTasks(prev => [...autoTasks, ...prev]);
         }
       }
+      await notifyAdmins('info', `Brand configuration modified: ${brandId}`);
+    } catch (err) {
+      console.error('Failed to update brand:', err);
     }
+  };
+
+  const handleUpdateUser = async (userId: string, updates: Partial<User>) => {
+    const userToUpdate = users.find(u => u.id === userId);
+    if (!userToUpdate) return;
+
+    const updatedUser = { ...userToUpdate, ...updates };
     
-    notifyAdmins('info', `Brand configuration modified: ${brandId}`);
-  };
-
-  const handleUpdateUser = (userId: string, updates: Partial<User>) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u));
-    if (currentUser?.id === userId) {
-      setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
-    }
-  };
-
-  const handleUpdateTaskStatus = (taskId: string, newStatus: TaskStatus, feedback?: string) => {
-    if (!currentUser) return;
-    
-    setTasks(prev => prev.map(t => {
-      if (t.id === taskId) {
-        const updatedTask = { ...t, status: newStatus };
-        if (feedback) {
-          updatedTask.comments = [
-            {
-              id: `c-${Math.random().toString(36).substr(2, 9)}`,
-              authorName: currentUser.name,
-              authorRole: currentUser.role,
-              text: `Status updated to ${newStatus}. Feedback: ${feedback}`,
-              timestamp: new Date().toISOString()
-            },
-            ...t.comments
-          ];
-        } else if (newStatus === 'Completed') {
-          updatedTask.comments = [
-            {
-              id: `c-${Math.random().toString(36).substr(2, 9)}`,
-              authorName: currentUser.name,
-              authorRole: currentUser.role,
-              text: `Deliverable approved and marked as completed.`,
-              timestamp: new Date().toISOString()
-            },
-            ...t.comments
-          ];
-        } else if (newStatus === 'Pending Approval') {
-          updatedTask.comments = [
-            {
-              id: `c-${Math.random().toString(36).substr(2, 9)}`,
-              authorName: currentUser.name,
-              authorRole: currentUser.role,
-              text: `Deliverable submitted for approval.`,
-              timestamp: new Date().toISOString()
-            },
-            ...t.comments
-          ];
-        }
-        return updatedTask;
+    try {
+      await supabaseService.saveUser(updatedUser);
+      setUsers(prev => prev.map(u => u.id === userId ? updatedUser : u));
+      if (currentUser?.id === userId) {
+        setCurrentUser(updatedUser);
       }
-      return t;
-    }));
-
-    const task = tasks.find(t => t.id === taskId);
-    if (task) {
-      if (newStatus === 'Pending Approval') {
-        notifyAdmins('info', `Deliverable Pending Approval: "${task.taskTitle}" by ${task.staffName}`, taskId);
-      } else {
-        const owner = tenantUsers.find(u => u.name === task.staffName);
-        if (owner && owner.id !== currentUser.id) {
-          createNotification(owner.id, newStatus === 'Completed' ? 'success' : 'warning', `Deliverable "${task.taskTitle}" status updated to ${newStatus}`, taskId);
-        }
+      
+      if (updates.registrationStatus === 'approved') {
+        await createNotification(userId, 'success', 'Your access request has been approved. Welcome to the workspace!');
       }
+    } catch (err) {
+      console.error('Failed to update user:', err);
     }
-  };
-
-  const markNotifRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
 
   const handleAdminDrillDown = (userId: string) => {
@@ -741,10 +946,100 @@ const App: React.FC = () => {
     navigateTo('personnel-detail');
   };
 
+  const handleClaimMentee = async (userId: string, leadId?: string) => {
+    if (!currentUser) return;
+    const userToUpdate = users.find(u => u.id === userId);
+    if (!userToUpdate) return;
+
+    const updatedUser = { ...userToUpdate, mentorId: leadId || currentUser.id };
+    
+    try {
+      await supabaseService.saveUser(updatedUser);
+      setUsers(prev => prev.map(u => u.id === userId ? updatedUser : u));
+      await createNotification(userId, 'success', `You have been assigned to ${currentUser.name} for mentorship and oversight.`);
+    } catch (err) {
+      console.error('Failed to claim mentee:', err);
+    }
+  };
+
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskStatus, feedback?: string) => {
+    if (!currentUser) return;
+    
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const updatedTask = { ...task, status: newStatus };
+    if (feedback) {
+      updatedTask.comments = [
+        {
+          id: `c-${Math.random().toString(36).substr(2, 9)}`,
+          authorName: currentUser.name,
+          authorRole: currentUser.role,
+          text: `Status updated to ${newStatus}. Feedback: ${feedback}`,
+          timestamp: new Date().toISOString()
+        },
+        ...task.comments
+      ];
+    } else if (newStatus === 'Completed') {
+      updatedTask.comments = [
+        {
+          id: `c-${Math.random().toString(36).substr(2, 9)}`,
+          authorName: currentUser.name,
+          authorRole: currentUser.role,
+          text: `Deliverable approved and marked as completed.`,
+          timestamp: new Date().toISOString()
+        },
+        ...task.comments
+      ];
+    } else if (newStatus === 'Pending Approval') {
+      updatedTask.comments = [
+        {
+          id: `c-${Math.random().toString(36).substr(2, 9)}`,
+          authorName: currentUser.name,
+          authorRole: currentUser.role,
+          text: `Deliverable submitted for approval.`,
+          timestamp: new Date().toISOString()
+        },
+        ...task.comments
+      ];
+    }
+
+    try {
+      await supabaseService.saveTask(updatedTask);
+      setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
+      
+      if (newStatus === 'Pending Approval') {
+        await notifyAdmins('info', `Deliverable Pending Approval: "${task.taskTitle}" by ${task.staffName}`, taskId);
+      } else {
+        const owner = tenantUsers.find(u => u.name === task.staffName);
+        if (owner && owner.id !== currentUser.id) {
+          await createNotification(owner.id, newStatus === 'Completed' ? 'success' : 'warning', `Deliverable "${task.taskTitle}" status updated to ${newStatus}`, taskId);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update task status:', err);
+    }
+  };
+
+  const markNotifRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+
   const handleBrandDrillDown = (brandId: string) => {
     setSelectedBrandDetailId(brandId);
     navigateTo('brand-detail');
   };
+
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-brand-blue border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Establishing Secure Link...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return (
@@ -768,7 +1063,21 @@ const App: React.FC = () => {
               <Logo className="h-8 sm:h-10" />
               <div className="h-6 w-px bg-slate-200 dark:bg-white/10 hidden sm:block"></div>
               <div className="flex flex-col">
-                <span className="hidden sm:block text-[11px] font-black uppercase tracking-[0.2em] text-brand-blue dark:text-brand-cyan">{currentOrg?.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="hidden sm:block text-[11px] font-black uppercase tracking-[0.2em] text-brand-blue dark:text-brand-cyan">{currentOrg?.name}</span>
+                  {isSupabaseConnected && (
+                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                      <div className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse"></div>
+                      <span className="text-[7px] font-black text-emerald-500 uppercase tracking-tighter">Cloud Active</span>
+                    </div>
+                  )}
+                  {supabaseError && (
+                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-500/10 border border-rose-500/20 rounded-full">
+                      <div className="w-1 h-1 bg-rose-500 rounded-full"></div>
+                      <span className="text-[7px] font-black text-rose-500 uppercase tracking-tighter">Cloud Error</span>
+                    </div>
+                  )}
+                </div>
                 <span className="hidden sm:block text-[8px] font-bold text-slate-400 uppercase tracking-widest">{currentOrg?.tenantId}</span>
               </div>
             </div>
@@ -807,7 +1116,7 @@ const App: React.FC = () => {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                   {tenantNotifications.filter(n => !n.read).length > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 animate-bounce">{tenantNotifications.filter(n => !n.read).length}</span>}
                 </button>
-                {showNotifs && <NotificationsPanel notifications={tenantNotifications} onNotificationClick={(n) => { markNotifRead(n.id); setShowNotifs(false); }} onMarkAllRead={() => setNotifications(prev => prev.map(n => ({...n, read: true})))} onClose={() => setShowNotifs(false)} />}
+                {showNotifs && <NotificationsPanel notifications={tenantNotifications} onNotificationClick={handleNotificationClick} onMarkAllRead={() => setNotifications(prev => prev.map(n => ({...n, read: true})))} onClose={() => setShowNotifs(false)} />}
               </div>
               
               <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-500">
@@ -852,7 +1161,16 @@ const App: React.FC = () => {
                       <p className="text-sm font-black text-slate-800 dark:text-white truncate">{currentUser?.name}</p>
                       <p className="text-[9px] font-black text-brand-cyan uppercase tracking-widest mt-1">{currentUser?.role}</p>
                     </div>
-                    <div className="p-4">
+                    <div className="p-4 space-y-2">
+                      {isAdminOrLead && (
+                        <button 
+                          onClick={() => navigateTo('notification-audit')}
+                          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-600 dark:text-slate-400 transition-colors rounded-2xl text-left font-black text-[10px] uppercase tracking-widest"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 002-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                          System Audit Logs
+                        </button>
+                      )}
                       <button onClick={handleLogout} className="w-full flex items-center gap-4 px-6 py-4 hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-600 transition-colors rounded-2xl text-left font-black text-[10px] uppercase tracking-widest">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                         Logout Session
@@ -870,8 +1188,8 @@ const App: React.FC = () => {
         {(isAddingTask || editingTask) ? (
           <TaskEntryForm 
             currentUser={currentUser!} 
-            users={tenantUsers} 
-            brands={tenantBrands}
+            users={visibleUsers} 
+            brands={visibleBrands}
             services={tenantServices}
             workspace={currentOrg!}
             initialTask={editingTask} 
@@ -880,7 +1198,7 @@ const App: React.FC = () => {
           />
         ) : (
           <>
-            {view === 'board' && <TaskBoard tasks={visibleTasks} users={tenantUsers} brands={tenantBrands} workspace={currentOrg!} currentUser={currentUser!} onEditTask={setEditingTask} onAddComment={handleAddComment} onUpdateTaskStatus={handleUpdateTaskStatus} />}
+            {view === 'board' && <TaskBoard tasks={visibleTasks} users={tenantUsers} brands={tenantBrands} workspace={currentOrg!} currentUser={currentUser!} onEditTask={setEditingTask} onAddComment={handleAddComment} onUpdateTaskStatus={handleUpdateTaskStatus} highlightTaskId={highlightTaskId} onHighlightClear={() => setHighlightTaskId(null)} />}
             {view === 'calendar' && <ContentCalendarView currentUser={currentUser!} users={tenantUsers} brands={tenantBrands} calendars={tenantCalendars} onSaveCalendar={handleSaveCalendar} />}
             {view === 'brands' && isAdminOrLead && <BrandManagement brands={tenantBrands} services={tenantServices} workspace={currentOrg!} onCreateBrand={handleCreateBrand} onUpdateBrand={handleUpdateBrand} onBrandClick={handleBrandDrillDown} />}
             {view === 'brand-detail' && selectedBrandDetailId && (
@@ -895,9 +1213,9 @@ const App: React.FC = () => {
                 currentUser={currentUser!}
               />
             )}
-            {view === 'squad' && isAdminOrLead && <MentorshipHub users={tenantUsers} tasks={tenantTasks} currentUser={currentUser!} onClaimMentee={(id, leadId) => setUsers(prev => prev.map(u => u.id === id ? { ...u, mentorId: leadId || currentUser.id } : u))} />}
+            {view === 'squad' && isAdminOrLead && <MentorshipHub users={tenantUsers} tasks={tenantTasks} currentUser={currentUser!} onClaimMentee={handleClaimMentee} />}
             {view === 'analysis' && isAdminOrLead && (loading ? <div className="py-20 text-center font-black animate-pulse text-slate-400 uppercase tracking-widest">Synthesizing intelligence logs...</div> : summary && <Dashboard summary={summary} users={tenantUsers} />)}
-            {view === 'users' && isAdminOrLead && <AdminUserManagement users={visibleUsers} currentUser={currentUser!} onUpdateUser={(id, updates) => setUsers(prev => prev.map(u => u.id === id ? {...u, ...updates} : u))} onDeleteUser={handleDeleteUser} onDrillDown={handleAdminDrillDown} />}
+            {view === 'users' && isAdminOrLead && <AdminUserManagement users={visibleUsers} currentUser={currentUser!} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} onDrillDown={handleAdminDrillDown} highlightUserId={highlightUserId} onHighlightClear={() => setHighlightUserId(null)} />}
             {view === 'personnel-detail' && selectedPersonnelId && isAdminOrLead && (
               <PersonnelProtocolView 
                 userId={selectedPersonnelId} 
@@ -905,6 +1223,14 @@ const App: React.FC = () => {
                 tasks={tenantTasks} 
                 onBack={() => setView('users')}
                 onAddComment={handleAddComment}
+              />
+            )}
+            {view === 'notification-audit' && isAdminOrLead && (
+              <NotificationAudit 
+                notifications={notifications.filter(n => n.orgId === currentUser?.orgId)}
+                users={users}
+                workspace={currentOrg!}
+                onClose={() => navigateTo('board')}
               />
             )}
             {(!isAdminOrLead && view !== 'board' && view !== 'calendar') && <div className="py-40 text-center text-slate-400 font-black uppercase tracking-widest">Redirecting to active deliverables...</div>}
