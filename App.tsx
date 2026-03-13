@@ -238,10 +238,63 @@ const App: React.FC = () => {
       }
     });
 
+    const orgSub = supabaseService.subscribeToChanges('organizations', (payload) => {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        const newOrg = {
+          ...payload.new,
+          createdAt: payload.new.created_at,
+          tenantId: payload.new.tenant_id
+        };
+        setOrganizations(prev => {
+          const exists = prev.find(o => o.id === newOrg.id);
+          if (exists) return prev.map(o => o.id === newOrg.id ? newOrg : o);
+          return [...prev, newOrg];
+        });
+      } else if (payload.eventType === 'DELETE') {
+        setOrganizations(prev => prev.filter(o => o.id !== payload.old.id));
+      }
+    });
+
+    const brandSub = supabaseService.subscribeToChanges('brands', (payload) => {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        const newBrand = {
+          ...payload.new,
+          orgId: payload.new.org_id,
+          leadId: payload.new.lead_id
+        };
+        setBrands(prev => {
+          const exists = prev.find(b => b.id === newBrand.id);
+          if (exists) return prev.map(b => b.id === newBrand.id ? newBrand : b);
+          return [...prev, newBrand];
+        });
+      } else if (payload.eventType === 'DELETE') {
+        setBrands(prev => prev.filter(b => b.id !== payload.old.id));
+      }
+    });
+
+    const serviceSub = supabaseService.subscribeToChanges('services', (payload) => {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        const newService = {
+          ...payload.new,
+          orgId: payload.new.org_id
+        };
+        setServices(prev => {
+          const exists = prev.find(s => s.id === newService.id);
+          if (exists) return prev.map(s => s.id === newService.id ? newService : s);
+          return [...prev, newService];
+        });
+      } else if (payload.eventType === 'DELETE') {
+        setServices(prev => prev.filter(s => s.id !== payload.old.id));
+      }
+    });
+
     return () => {
       taskSub.unsubscribe();
       userSub.unsubscribe();
       notifSub.unsubscribe();
+      orgSub.unsubscribe();
+      brandSub.unsubscribe();
+      serviceSub.unsubscribe();
     };
   }, []);
 
@@ -490,6 +543,7 @@ const App: React.FC = () => {
       
       try {
         await supabaseService.saveOrganization(newOrg);
+        setOrganizations(prev => [...prev, newOrg]);
         targetOrgId = newOrg.id;
         finalTenantId = newOrg.tenantId;
 
@@ -500,6 +554,7 @@ const App: React.FC = () => {
           orgId: targetOrgId
         }));
         for (const s of newServices) await supabaseService.saveService(s);
+        setServices(prev => [...prev, ...newServices]);
 
         // SEEDING: Create a default "Internal Operations" brand for the new org
         const defaultBrand: Brand = {
@@ -510,6 +565,7 @@ const App: React.FC = () => {
           leadId: newUserId // Link to the new admin
         };
         await supabaseService.saveBrand(defaultBrand);
+        setBrands(prev => [...prev, defaultBrand]);
 
         // SEEDING: Create initial onboarding tasks
         const onboardingTasks: StaffTask[] = [
@@ -535,6 +591,7 @@ const App: React.FC = () => {
           }
         ];
         for (const t of onboardingTasks) await supabaseService.saveTask(t);
+        setTasks(prev => [...prev, ...onboardingTasks]);
       } catch (err) {
         console.error('Failed to provision workspace:', err);
         return { error: "Failed to provision workspace. Please try again." };
@@ -568,6 +625,7 @@ const App: React.FC = () => {
     
     try {
       await supabaseService.saveUser(newUser);
+      setUsers(prev => [...prev, newUser]);
       
       if (registrationStatus === 'pending') {
         const targetOrgAdmins = users.filter(u => u.orgId === targetOrgId && (u.role === 'Admin' || u.role === 'Staff Lead'));
@@ -1030,6 +1088,30 @@ const App: React.FC = () => {
     navigateTo('brand-detail');
   };
 
+  const handleResetSystem = async () => {
+    if (!window.confirm('CRITICAL: This will delete ALL users, tasks, brands, and organizations from the database. This action cannot be undone. Are you absolutely sure?')) {
+      return;
+    }
+
+    try {
+      await supabaseService.resetAllData();
+      // Clear local state
+      setUsers([]);
+      setTasks([]);
+      setBrands([]);
+      setOrganizations([]);
+      setNotifications([]);
+      setCalendars([]);
+      setCurrentUser(null);
+      setIsLoggedIn(false);
+      localStorage.clear();
+      window.location.reload();
+    } catch (err) {
+      console.error('Failed to reset system:', err);
+      alert('Failed to reset system. Check console for details.');
+    }
+  };
+
   if (isInitialLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
@@ -1215,7 +1297,19 @@ const App: React.FC = () => {
             )}
             {view === 'squad' && isAdminOrLead && <MentorshipHub users={tenantUsers} tasks={tenantTasks} currentUser={currentUser!} onClaimMentee={handleClaimMentee} />}
             {view === 'analysis' && isAdminOrLead && (loading ? <div className="py-20 text-center font-black animate-pulse text-slate-400 uppercase tracking-widest">Synthesizing intelligence logs...</div> : summary && <Dashboard summary={summary} users={tenantUsers} />)}
-            {view === 'users' && isAdminOrLead && <AdminUserManagement users={visibleUsers} currentUser={currentUser!} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} onDrillDown={handleAdminDrillDown} highlightUserId={highlightUserId} onHighlightClear={() => setHighlightUserId(null)} />}
+            {view === 'users' && isAdminOrLead && (
+              <AdminUserManagement 
+                users={visibleUsers} 
+                currentUser={currentUser!} 
+                organization={currentOrg!}
+                onUpdateUser={handleUpdateUser} 
+                onDeleteUser={handleDeleteUser} 
+                onDrillDown={handleAdminDrillDown} 
+                onResetSystem={handleResetSystem}
+                highlightUserId={highlightUserId} 
+                onHighlightClear={() => setHighlightUserId(null)} 
+              />
+            )}
             {view === 'personnel-detail' && selectedPersonnelId && isAdminOrLead && (
               <PersonnelProtocolView 
                 userId={selectedPersonnelId} 

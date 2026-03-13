@@ -13,31 +13,35 @@ const Logo: React.FC<{ className?: string }> = ({ className = "h-10" }) => {
       <div className="relative flex-shrink-0">
         <svg 
           viewBox="0 0 100 100" 
-          className="w-10 h-10 sm:w-12 sm:h-12 drop-shadow-sm" 
+          className="w-10 h-10 sm:w-12 sm:h-12 drop-shadow-md" 
           fill="none" 
           xmlns="http://www.w3.org/2000/svg"
         >
-          {/* Foundation Arc (CloudCrave Blue) */}
+          <defs>
+            <linearGradient id="logo-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#1D4ED8" />
+              <stop offset="100%" stopColor="#38BDF8" />
+            </linearGradient>
+          </defs>
+          
+          {/* Cloud Shape */}
           <path 
-            d="M30 40C30 25 45 15 60 15C75 15 85 25 85 40C85 55 75 65 60 65" 
-            stroke="#1D4ED8" 
-            strokeWidth="11" 
+            d="M25 70C15 70 10 60 10 50C10 35 25 30 35 30C40 15 60 10 75 25C90 25 95 40 90 55C95 65 90 80 75 80C65 80 60 75 55 70" 
+            stroke="url(#logo-gradient)" 
+            strokeWidth="8" 
             strokeLinecap="round" 
+            strokeLinejoin="round"
           />
-          <circle cx="30" cy="40" r="6" fill="#1D4ED8" />
-
-          {/* Operational Arc (CraveOps Cyan) */}
-          <path 
-            d="M70 60C70 75 55 85 40 85C25 85 15 75 15 60C15 45 25 35 40 35" 
-            stroke="#38BDF8" 
-            strokeWidth="11" 
-            strokeLinecap="round" 
-            style={{ mixBlendMode: 'multiply' }}
-          />
-          <circle cx="70" cy="60" r="6" fill="#38BDF8" />
-
-          {/* Center Point - The "Eye of Operations" */}
-          <circle cx="45" cy="50" r="3" fill="white" className="dark:fill-slate-900" />
+          
+          {/* Network Triangle */}
+          <g transform="translate(35, 40) scale(0.6)">
+            <circle cx="50" cy="20" r="12" fill="url(#logo-gradient)" />
+            <circle cx="20" cy="70" r="12" fill="url(#logo-gradient)" />
+            <circle cx="80" cy="70" r="12" fill="url(#logo-gradient)" />
+            <line x1="50" y1="20" x2="20" y2="70" stroke="url(#logo-gradient)" strokeWidth="6" />
+            <line x1="50" y1="20" x2="80" y2="70" stroke="url(#logo-gradient)" strokeWidth="6" />
+            <line x1="20" y1="70" x2="80" y2="70" stroke="url(#logo-gradient)" strokeWidth="6" />
+          </g>
         </svg>
       </div>
 

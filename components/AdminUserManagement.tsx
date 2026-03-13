@@ -1,18 +1,30 @@
 
 import React, { useEffect } from 'react';
-import { User, UserRole } from '../types';
+import { User, UserRole, Organization } from '../types';
 
 interface AdminUserManagementProps {
   users: User[];
   currentUser: User;
+  organization: Organization;
   onUpdateUser: (userId: string, updates: Partial<User>) => void;
   onDeleteUser: (userId: string) => void;
+  onResetSystem: () => void;
   highlightUserId?: string | null;
   onHighlightClear?: () => void;
   onDrillDown: (userId: string) => void;
 }
 
-const AdminUserManagement: React.FC<AdminUserManagementProps> = ({ users, currentUser, onUpdateUser, onDeleteUser, highlightUserId, onHighlightClear, onDrillDown }) => {
+const AdminUserManagement: React.FC<AdminUserManagementProps> = ({ 
+  users, 
+  currentUser, 
+  organization,
+  onUpdateUser, 
+  onDeleteUser, 
+  onResetSystem,
+  highlightUserId, 
+  onHighlightClear, 
+  onDrillDown 
+}) => {
   const isAdmin = currentUser.role === 'Admin';
   const leads = users.filter(u => u.role === 'Staff Lead' && u.registrationStatus === 'approved');
 
@@ -30,9 +42,27 @@ const AdminUserManagement: React.FC<AdminUserManagementProps> = ({ users, curren
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
-      <div>
-        <h2 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight leading-none">User Moderation</h2>
-        <p className="text-slate-500 dark:text-slate-400 font-medium text-lg mt-3">Moderate workspace units and tactical roles within your scope.</p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h2 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight leading-none">User Moderation</h2>
+          <p className="text-slate-500 dark:text-slate-400 font-medium text-lg mt-3">Moderate workspace units and tactical roles within your scope.</p>
+          <div className="mt-4 flex items-center gap-3">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Workspace Tenant Code:</span>
+            <code className="bg-slate-100 dark:bg-white/5 px-3 py-1 rounded-lg text-brand-blue font-mono text-sm font-bold border border-slate-200 dark:border-white/10">
+              {organization.tenantId}
+            </code>
+          </div>
+        </div>
+
+        {isAdmin && (
+          <button 
+            onClick={onResetSystem}
+            className="flex items-center gap-2 px-6 py-3 bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-600 hover:text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all border border-rose-100 dark:border-rose-900/20"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            Reset System Data
+          </button>
+        )}
       </div>
 
       <div className="bg-white dark:bg-slate-900/60 backdrop-blur-xl rounded-[2.5rem] border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden overflow-x-auto">

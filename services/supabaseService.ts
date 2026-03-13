@@ -199,5 +199,14 @@ export const supabaseService = {
       .channel(`public:${table}`)
       .on('postgres_changes', { event: '*', schema: 'public', table }, callback)
       .subscribe();
+  },
+
+  async resetAllData() {
+    // Delete in order to respect potential foreign keys (though Supabase RLS/FKs might vary)
+    const tables = ['notifications', 'tasks', 'content_calendars', 'brands', 'services', 'users', 'organizations'];
+    for (const table of tables) {
+      const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      if (error) console.error(`Error clearing ${table}:`, error);
+    }
   }
 };
