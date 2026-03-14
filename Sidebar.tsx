@@ -101,16 +101,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
     >
       {/* Header */}
       <div className={`p-6 flex items-center gap-4 mb-4 relative ${isCollapsed ? 'justify-center' : ''}`}>
-        <div className="w-10 h-10 bg-[#22c55e] rounded-xl flex items-center justify-center shadow-lg shadow-[#22c55e]/20 flex-shrink-0">
-          <div className="w-5 h-5 border-2 border-white rounded-sm rotate-45 flex items-center justify-center">
-            <div className="w-1 h-1 bg-white rounded-full"></div>
-          </div>
+        <div className="w-10 h-10 bg-[#22c55e] rounded-xl flex items-center justify-center shadow-lg shadow-[#22c55e]/20 flex-shrink-0 overflow-hidden">
+          {currentOrg?.logoUrl ? (
+            <img 
+              src={currentOrg.logoUrl} 
+              alt={currentOrg.name} 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-5 h-5 border-2 border-white rounded-sm rotate-45 flex items-center justify-center">
+              <span className="text-white text-[10px] font-black -rotate-45">{currentOrg?.name.charAt(0)}</span>
+            </div>
+          )}
         </div>
         {!isCollapsed && (
-          <div className="animate-in fade-in slide-in-from-left-2 duration-300">
-            <h1 className="text-xl font-[900] text-white tracking-[-0.03em] leading-none">CraveOps</h1>
+          <div className="animate-in fade-in slide-in-from-left-2 duration-300 min-w-0">
+            <h1 className="text-xl font-[900] text-white tracking-[-0.03em] leading-none truncate">
+              {currentOrg?.name || 'CraveOps'}
+            </h1>
             <div className="flex items-center gap-2 mt-1">
-              <p className="text-[10px] font-mono text-white/40 uppercase tracking-widest">Intelligence Hub</p>
+              <p className="text-[10px] font-mono text-white/40 uppercase tracking-widest">Workspace</p>
               <span className="w-1 h-1 rounded-full bg-white/20"></span>
               <p className="text-[10px] font-mono text-[#22c55e] font-bold">{currentOrg?.tenantId}</p>
             </div>

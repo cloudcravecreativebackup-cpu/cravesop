@@ -1079,6 +1079,18 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateOrg = async (updates: Partial<Organization>) => {
+    if (!currentOrg) return;
+    const updatedOrg = { ...currentOrg, ...updates };
+    try {
+      await supabaseService.saveOrganization(updatedOrg);
+      setOrganizations(prev => prev.map(o => o.id === currentOrg.id ? updatedOrg : o));
+      await notifyAdmins('success', `Workspace branding updated: ${updatedOrg.name}`);
+    } catch (err) {
+      console.error('Failed to update organization:', err);
+    }
+  };
+
   const handleAdminDrillDown = (userId: string) => {
     setSelectedPersonnelId(userId);
     navigateTo('personnel-detail');
@@ -1393,6 +1405,7 @@ const App: React.FC = () => {
                 organization={currentOrg!}
                 onUpdateUser={handleUpdateUser} 
                 onDeleteUser={handleDeleteUser} 
+                onUpdateOrg={handleUpdateOrg}
                 onDrillDown={handleAdminDrillDown} 
                 onResetSystem={handleResetSystem}
                 highlightUserId={highlightUserId} 

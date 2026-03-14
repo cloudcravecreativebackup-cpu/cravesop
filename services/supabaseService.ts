@@ -6,7 +6,13 @@ export const supabaseService = {
   async getOrganizations(): Promise<Organization[]> {
     const { data, error } = await supabase.from('organizations').select('*');
     if (error) throw error;
-    return data || [];
+    return (data || []).map(o => ({
+      ...o,
+      createdAt: o.created_at,
+      tenantId: o.tenant_id,
+      logoUrl: o.logo_url,
+      primaryColor: o.primary_color
+    }));
   },
   async saveOrganization(org: Organization) {
     const { error } = await supabase.from('organizations').upsert({
@@ -15,6 +21,8 @@ export const supabaseService = {
       slug: org.slug,
       created_at: org.createdAt,
       tenant_id: org.tenantId,
+      logo_url: org.logoUrl,
+      primary_color: org.primaryColor,
       config: org.config
     });
     if (error) throw error;

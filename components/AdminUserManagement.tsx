@@ -1,6 +1,7 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { User, UserRole, Organization } from '../types';
+import { Upload, X, Image as ImageIcon } from 'lucide-react';
 
 interface AdminUserManagementProps {
   users: User[];
@@ -8,6 +9,7 @@ interface AdminUserManagementProps {
   organization: Organization;
   onUpdateUser: (userId: string, updates: Partial<User>) => void;
   onDeleteUser: (userId: string) => void;
+  onUpdateOrg: (updates: Partial<Organization>) => void;
   onResetSystem: () => void;
   highlightUserId?: string | null;
   onHighlightClear?: () => void;
@@ -20,12 +22,39 @@ const AdminUserManagement: React.FC<AdminUserManagementProps> = ({
   organization,
   onUpdateUser, 
   onDeleteUser, 
+  onUpdateOrg,
   onResetSystem,
   highlightUserId, 
   onHighlightClear, 
   onDrillDown 
 }) => {
   const isAdmin = currentUser.role === 'Admin';
+  const [isEditingOrg, setIsEditingOrg] = React.useState(false);
+  const [orgName, setOrgName] = React.useState(organization.name);
+  const [orgLogo, setOrgLogo] = React.useState(organization.logoUrl || '');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024) { // 1MB limit for base64 storage
+      alert('Logo file is too large. Please upload an image under 1MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setOrgLogo(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleOrgSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateOrg({ name: orgName, logoUrl: orgLogo });
+    setIsEditingOrg(false);
+  };
   const leads = users.filter(u => u.role === 'Staff Lead' && u.registrationStatus === 'approved');
 
   useEffect(() => {
@@ -46,12 +75,87 @@ const AdminUserManagement: React.FC<AdminUserManagementProps> = ({
         <div>
           <h2 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight leading-none">User Moderation</h2>
           <p className="text-slate-500 dark:text-slate-400 font-medium text-lg mt-3">Moderate workspace units and tactical roles within your scope.</p>
-          <div className="mt-4 flex items-center gap-3">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Workspace Tenant Code:</span>
-            <code className="bg-slate-100 dark:bg-white/5 px-3 py-1 rounded-lg text-brand-blue font-mono text-sm font-bold border border-slate-200 dark:border-white/10">
-              {organization.tenantId}
-            </code>
+          
+          <div className="mt-6 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Workspace Tenant Code:</span>
+              <code className="bg-slate-100 dark:bg-white/5 px-3 py-1 rounded-lg text-brand-blue font-mono text-sm font-bold border border-slate-200 dark:border-white/10">
+                {organization.tenantId}
+              </code>
+            </div>
+
+            {isAdmin && (
+              <button 
+                onClick={() => setIsEditingOrg(!isEditingOrg)}
+                className="text-[10px] font-black uppercase tracking-widest text-brand-blue hover:underline"
+              >
+                {isEditingOrg ? 'Cancel Branding' : 'Edit Workspace Branding'}
+              </button>
+            )}
           </div>
+
+          {isEditingOrg && (
+            <div className="mt-6 p-8 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-200 dark:border-white/5 animate-in slide-in-from-top-4 duration-500">
+              <form onSubmit={handleOrgSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Workspace Display Name</label>
+                  <input 
+                    type="text" 
+                    value={orgName}
+                    onChange={e => setOrgName(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-brand-blue"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Workspace Logo</label>
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shadow-inner group relative">
+                      {orgLogo ? (
+                        <>
+                          <img src={orgLogo} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          <button 
+                            type="button"
+                            onClick={() => setOrgLogo('')}
+                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </>
+                      ) : (
+                        <ImageIcon className="w-6 h-6 text-slate-300" />
+                      )}
+                    </div>
+                    <div className="flex-grow">
+                      <input 
+                        type="file" 
+                        ref={fileInputRef}
+                        onChange={handleLogoUpload}
+                        accept="image/*"
+                        className="hidden"
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 hover:border-brand-blue transition-all"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Upload Image
+                      </button>
+                      <p className="text-[9px] text-slate-400 mt-2 font-medium italic">Recommended: Square PNG/JPG, max 1MB.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="md:col-span-2 flex justify-end">
+                  <button 
+                    type="submit"
+                    className="bg-brand-blue text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
         </div>
 
         {isAdmin && (
