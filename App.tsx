@@ -12,8 +12,11 @@ import TaskBoard from './components/TaskBoard';
 import Auth from './components/Auth';
 import AdminUserManagement from './components/AdminUserManagement';
 import BrandManagement from './components/BrandManagement';
+import ServiceManagement from './components/ServiceManagement';
 import BrandDetailView from './components/BrandDetailView';
-import Logo from './components/Logo';
+import { Logo } from './components/Logo';
+import { Sidebar } from './Sidebar';
+import { Search, Menu, X } from 'lucide-react';
 import NotificationsPanel from './components/NotificationsPanel';
 import NotificationAudit from './components/NotificationAudit';
 import MentorshipHub from './components/MentorshipHub';
@@ -21,7 +24,7 @@ import PersonnelProtocolView from './components/PersonnelProtocolView';
 import ContentCalendarView from './components/ContentCalendarView';
 import ProfileSettings from './components/ProfileSettings';
 
-type AppView = 'board' | 'analysis' | 'users' | 'squad' | 'personnel-detail' | 'brands' | 'brand-detail' | 'calendar' | 'notification-audit' | 'profile';
+type AppView = 'board' | 'analysis' | 'users' | 'squad' | 'personnel-detail' | 'brands' | 'brand-detail' | 'calendar' | 'notification-audit' | 'profile' | 'services';
 
 const STORAGE_KEY_ORGS = 'craveops_cloudcraves_orgs_v2';
 const STORAGE_KEY_USERS = 'craveops_cloudcraves_users_v2';
@@ -114,6 +117,7 @@ const App: React.FC = () => {
   });
 
   const [isLoggedIn, setIsLoggedIn] = useState(!!currentUser);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   const [tasks, setTasks] = useState<StaffTask[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_TASKS);
@@ -913,6 +917,48 @@ const App: React.FC = () => {
     }
   };
 
+  const handleCreateService = async (serviceData: Partial<Service>) => {
+    if (!currentUser) return;
+    const newService: Service = {
+      id: `s-${Math.random().toString(36).substr(2, 9)}`,
+      orgId: currentUser.orgId,
+      name: serviceData.name || 'New Service',
+      description: serviceData.description,
+      templates: serviceData.templates || []
+    };
+    
+    try {
+      await supabaseService.saveService(newService);
+      setServices(prev => [...prev, newService]);
+      await notifyAdmins('success', `New service blueprint defined: ${newService.name}`);
+    } catch (err) {
+      console.error('Failed to create service:', err);
+    }
+  };
+
+  const handleUpdateService = async (serviceId: string, updates: Partial<Service>) => {
+    const oldService = services.find(s => s.id === serviceId);
+    if (!oldService) return;
+
+    const updatedService = { ...oldService, ...updates };
+    
+    try {
+      await supabaseService.saveService(updatedService);
+      setServices(prev => prev.map(s => s.id === serviceId ? updatedService : s));
+    } catch (err) {
+      console.error('Failed to update service:', err);
+    }
+  };
+
+  const handleDeleteService = async (serviceId: string) => {
+    try {
+      await supabaseService.deleteService(serviceId);
+      setServices(prev => prev.filter(s => s.id !== serviceId));
+    } catch (err) {
+      console.error('Failed to delete service:', err);
+    }
+  };
+
   const handleCreateBrand = async (brandName: string, selectedServices: ServiceType[]) => {
     if (!currentUser) return;
     const newBrand: Brand = {
@@ -1193,40 +1239,77 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col font-sans transition-colors duration-300">
-      {successMessage && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 duration-500">
-          <div className="bg-emerald-600 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-500/50 backdrop-blur-md">
-            <div className="bg-white/20 p-1.5 rounded-full">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-            </div>
-            <p className="text-sm font-black tracking-wide uppercase">{successMessage}</p>
+    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-300">
+      {/* Desktop Sidebar */}
+      <div className="hidden lg:block">
+        <Sidebar 
+          view={view}
+          currentUser={currentUser}
+          currentOrg={currentOrg}
+          isDarkMode={isDarkMode}
+          setIsDarkMode={setIsDarkMode}
+          navigateTo={navigateTo}
+          handleLogout={handleLogout}
+          onAddDeliverable={() => { setEditingTask(null); setIsAddingTask(true); }}
+          unreadNotifications={tenantNotifications.filter(n => !n.read).length}
+          onShowNotifications={() => { setShowNotifs(!showNotifs); setShowProfileModal(false); }}
+          handleAnalyze={handleAnalyze}
+          isCollapsed={isSidebarCollapsed}
+          setIsCollapsed={setIsSidebarCollapsed}
+        />
+      </div>
+
+      {/* Mobile Sidebar Drawer */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[200] lg:hidden animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
+          <div className="absolute left-0 top-0 bottom-0 w-80 bg-[#09090b] shadow-2xl animate-in slide-in-from-left duration-500">
+            <Sidebar 
+              view={view}
+              currentUser={currentUser}
+              currentOrg={currentOrg}
+              isDarkMode={isDarkMode}
+              setIsDarkMode={setIsDarkMode}
+              navigateTo={(v) => { navigateTo(v); setIsMobileMenuOpen(false); }}
+              handleLogout={handleLogout}
+              onAddDeliverable={() => { setEditingTask(null); setIsAddingTask(true); setIsMobileMenuOpen(false); }}
+              unreadNotifications={tenantNotifications.filter(n => !n.read).length}
+              onShowNotifications={() => { setShowNotifs(!showNotifs); setIsMobileMenuOpen(false); }}
+              handleAnalyze={handleAnalyze}
+              isCollapsed={false}
+              setIsCollapsed={() => {}}
+            />
           </div>
         </div>
       )}
-      <header className="bg-white/95 dark:bg-slate-950/95 backdrop-blur-lg border-b border-slate-200/50 dark:border-white/10 sticky top-0 z-[100] shadow-soft">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
+
+      <div className="flex-grow flex flex-col min-w-0">
+        {successMessage && (
+          <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-4 duration-500">
+            <div className="bg-emerald-600 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-500/50 backdrop-blur-md">
+              <div className="bg-white/20 p-1.5 rounded-full">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+              </div>
+              <p className="text-sm font-black tracking-wide uppercase">{successMessage}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Top Bar - Mobile Only or Global Search */}
+        <header className="bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200/50 dark:border-white/10 sticky top-0 z-[100] h-20 flex items-center px-4 sm:px-8">
+          <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-4">
               <button 
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                onClick={() => setIsMobileMenuOpen(true)}
                 className="lg:hidden p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-500"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {isMobileMenuOpen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                  )}
-                </svg>
+                <Menu className="w-6 h-6" />
               </button>
-              <Logo className="h-8 sm:h-10" />
-              <div className="h-6 w-px bg-slate-200 dark:bg-white/10 hidden sm:block"></div>
               
-              {/* Global Search */}
+              {/* Global Search - Visible on Desktop */}
               <div className="hidden md:flex items-center relative group">
                 <div className="absolute left-4 text-slate-400 group-focus-within:text-brand-blue transition-colors">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                  <Search className="w-4 h-4" />
                 </div>
                 <input 
                   type="text"
@@ -1236,172 +1319,33 @@ const App: React.FC = () => {
                   className="bg-slate-100 dark:bg-white/5 border border-transparent focus:border-brand-blue/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl pl-12 pr-6 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none transition-all w-64 focus:w-80"
                 />
               </div>
-
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <span className="hidden sm:block text-[11px] font-black uppercase tracking-[0.2em] text-brand-blue dark:text-brand-cyan">{currentOrg?.name}</span>
-                  {isSupabaseConnected && (
-                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                      <div className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse"></div>
-                      <span className="text-[7px] font-black text-emerald-500 uppercase tracking-tighter">Cloud Active</span>
-                    </div>
-                  )}
-                  {supabaseError && (
-                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-500/10 border border-rose-500/20 rounded-full">
-                      <div className="w-1 h-1 bg-rose-500 rounded-full"></div>
-                      <span className="text-[7px] font-black text-rose-500 uppercase tracking-tighter">Cloud Error</span>
-                    </div>
-                  )}
-                </div>
-                <span className="hidden sm:block text-[8px] font-bold text-slate-400 uppercase tracking-widest">{currentOrg?.tenantId}</span>
-              </div>
             </div>
-            
-            <nav className="hidden lg:flex items-center bg-slate-100 dark:bg-white/5 p-1 rounded-2xl border border-slate-200/50 dark:border-white/10 overflow-x-auto no-scrollbar">
-              <button onClick={() => navigateTo('board')} className={`px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 ${view === 'board' ? 'bg-white dark:bg-white/10 text-brand-blue shadow-sm' : 'text-slate-500'}`}>Deliverables Board</button>
-              {(isAdminOrLead || currentUser?.role === 'Staff Member' || currentUser?.role === 'Mentee') && (
-                <button onClick={() => navigateTo('calendar')} className={`px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 ${view === 'calendar' ? 'bg-white dark:bg-white/10 text-brand-blue shadow-sm' : 'text-slate-500'}`}>Calendars</button>
-              )}
-              {isAdminOrLead && (
-                <button onClick={() => navigateTo('brands')} className={`px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 ${view === 'brands' || view === 'brand-detail' ? 'bg-white dark:bg-white/10 text-brand-blue shadow-sm' : 'text-slate-500'}`}>Brands</button>
-              )}
-              {isAdminOrLead && (
-                <button onClick={() => navigateTo('squad')} className={`px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 ${view === 'squad' ? 'bg-white dark:bg-white/10 text-brand-blue shadow-sm' : 'text-slate-500'}`}>Squad Units</button>
-              )}
-              {isAdminOrLead && (
-                <>
-                  <button onClick={() => { navigateTo('analysis'); handleAnalyze(); }} className={`px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 ${view === 'analysis' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500'}`}>Intelligence</button>
-                  <button onClick={() => navigateTo('users')} className={`px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 ${view === 'users' || view === 'personnel-detail' ? 'bg-white dark:bg-white/10 text-brand-blue shadow-sm' : 'text-slate-500'}`}>Moderation</button>
-                </>
-              )}
-            </nav>
-            
+
             <div className="flex items-center gap-4">
-              {isAdminOrLead && (
-                <button 
-                  onClick={() => { setEditingTask(null); setIsAddingTask(true); }}
-                  className="bg-brand-blue hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95"
-                >
-                  + Generate Deliverable
-                </button>
-              )}
-
-              <div className="relative">
-                <button onClick={() => { setShowNotifs(!showNotifs); setShowProfileModal(false); }} className="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-500 relative">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                  {tenantNotifications.filter(n => !n.read).length > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 animate-bounce">{tenantNotifications.filter(n => !n.read).length}</span>}
-                </button>
-                {showNotifs && <NotificationsPanel notifications={tenantNotifications} onNotificationClick={handleNotificationClick} onMarkAllRead={() => setNotifications(prev => prev.map(n => ({...n, read: true})))} onClose={() => setShowNotifs(false)} />}
-              </div>
-              
-              <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-500">
-                {isDarkMode ? '🌙' : '☀️'}
-              </button>
-
-              <div className="relative">
-                <div onClick={() => { setShowProfileModal(!showProfileModal); setShowNotifs(false); }} className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 border-2 border-transparent hover:border-brand-blue overflow-hidden cursor-pointer shadow-sm">
-                  <img src={currentUser?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              {isSupabaseConnected && (
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                  <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Cloud Active</span>
                 </div>
-                {showProfileModal && (
-                  <div className="absolute right-0 mt-4 w-72 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden z-[200] animate-in zoom-in-95 duration-200 origin-top-right">
-                    <div className="p-8 border-b border-slate-50 dark:border-white/5 text-center">
-                      <div className="relative w-20 h-20 mx-auto mb-4 group">
-                        <img 
-                          src={currentUser?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`} 
-                          className="w-full h-full rounded-2xl object-cover border-2 border-slate-100 dark:border-white/10" 
-                          referrerPolicy="no-referrer"
-                        />
-                        <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                          <input 
-                            type="file" 
-                            className="hidden" 
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                if (file.size > 2 * 1024 * 1024) {
-                                  alert("File size must be less than 2MB");
-                                  return;
-                                }
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  handleUpdateUser(currentUser!.id, { avatar: reader.result as string });
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </label>
-                      </div>
-                      <p className="text-sm font-black text-slate-800 dark:text-white truncate">{currentUser?.name}</p>
-                      <p className="text-[9px] font-black text-brand-cyan uppercase tracking-widest mt-1">{currentUser?.role}</p>
-                    </div>
-                    <div className="p-4 space-y-2">
-                      <button 
-                        onClick={() => navigateTo('profile')}
-                        className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-600 dark:text-slate-400 transition-colors rounded-2xl text-left font-black text-[10px] uppercase tracking-widest"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                        Profile Settings
-                      </button>
-                      {isAdminOrLead && (
-                        <button 
-                          onClick={() => navigateTo('notification-audit')}
-                          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-600 dark:text-slate-400 transition-colors rounded-2xl text-left font-black text-[10px] uppercase tracking-widest"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 002-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-                          System Audit Logs
-                        </button>
-                      )}
-                      <button onClick={handleLogout} className="w-full flex items-center gap-4 px-6 py-4 hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-600 transition-colors rounded-2xl text-left font-black text-[10px] uppercase tracking-widest">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                        Logout Session
-                      </button>
-                    </div>
+              )}
+              
+              <div className="relative">
+                {showNotifs && (
+                  <div className="absolute right-0 mt-4 w-96 z-[200]">
+                    <NotificationsPanel 
+                      notifications={tenantNotifications} 
+                      onNotificationClick={handleNotificationClick} 
+                      onMarkAllRead={() => setNotifications(prev => prev.map(n => ({...n, read: true})))} 
+                      onClose={() => setShowNotifs(false)} 
+                    />
                   </div>
                 )}
               </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Mobile Menu Overlay */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-[150] lg:hidden animate-in fade-in duration-300">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
-          <div className="absolute left-0 top-0 bottom-0 w-80 bg-white dark:bg-slate-950 shadow-2xl p-8 animate-in slide-in-from-left duration-500">
-            <div className="flex items-center justify-between mb-12">
-              <Logo className="h-8" />
-              <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-slate-400">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            
-            <nav className="space-y-4">
-              <button onClick={() => navigateTo('board')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'board' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Deliverables Board</button>
-              {(isAdminOrLead || currentUser?.role === 'Staff Member' || currentUser?.role === 'Mentee') && (
-                <button onClick={() => navigateTo('calendar')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'calendar' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Calendars</button>
-              )}
-              {isAdminOrLead && (
-                <>
-                  <button onClick={() => navigateTo('brands')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'brands' || view === 'brand-detail' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Brands</button>
-                  <button onClick={() => navigateTo('squad')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'squad' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Squad Units</button>
-                  <button onClick={() => { navigateTo('analysis'); handleAnalyze(); }} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'analysis' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Intelligence</button>
-                  <button onClick={() => navigateTo('users')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'users' || view === 'personnel-detail' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Moderation</button>
-                </>
-              )}
-              <div className="pt-8 border-t border-slate-100 dark:border-white/5 mt-8">
-                <button onClick={() => navigateTo('profile')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'profile' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Profile Settings</button>
-                <button onClick={handleLogout} className="w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all">Logout Session</button>
-              </div>
-            </nav>
-          </div>
-        </div>
-      )}
-
-      <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
+        <main className="flex-grow p-4 sm:p-8 lg:p-12 overflow-y-auto">
         {(isAddingTask || editingTask) ? (
           <TaskEntryForm 
             currentUser={currentUser!} 
@@ -1419,6 +1363,15 @@ const App: React.FC = () => {
             {view === 'calendar' && <ContentCalendarView currentUser={currentUser!} users={tenantUsers} brands={tenantBrands} calendars={tenantCalendars} onSaveCalendar={handleSaveCalendar} />}
             {view === 'profile' && <ProfileSettings currentUser={currentUser!} onUpdateUser={handleUpdateUser} onBack={() => navigateTo('board')} />}
             {view === 'brands' && isAdminOrLead && <BrandManagement brands={tenantBrands} services={tenantServices} workspace={currentOrg!} onCreateBrand={handleCreateBrand} onUpdateBrand={handleUpdateBrand} onBrandClick={handleBrandDrillDown} />}
+            {view === 'services' && isAdminOrLead && (
+              <ServiceManagement 
+                services={tenantServices}
+                workspace={currentOrg!}
+                onCreateService={handleCreateService}
+                onUpdateService={handleUpdateService}
+                onDeleteService={handleDeleteService}
+              />
+            )}
             {view === 'brand-detail' && selectedBrandDetailId && (
               <BrandDetailView 
                 brand={brands.find(b => b.id === selectedBrandDetailId)!}
@@ -1432,7 +1385,7 @@ const App: React.FC = () => {
               />
             )}
             {view === 'squad' && isAdminOrLead && <MentorshipHub users={tenantUsers} tasks={tenantTasks} currentUser={currentUser!} onClaimMentee={handleClaimMentee} />}
-            {view === 'analysis' && isAdminOrLead && (loading ? <div className="py-20 text-center font-black animate-pulse text-slate-400 uppercase tracking-widest">Synthesizing intelligence logs...</div> : summary && <Dashboard summary={summary} users={tenantUsers} />)}
+            {view === 'analysis' && isAdminOrLead && (loading ? <div className="py-20 text-center font-black animate-pulse text-slate-400 uppercase tracking-widest">Synthesizing intelligence logs...</div> : summary && <Dashboard summary={summary} users={tenantUsers} organization={currentOrg!} />)}
             {view === 'users' && isAdminOrLead && (
               <AdminUserManagement 
                 users={visibleUsers} 
@@ -1467,6 +1420,7 @@ const App: React.FC = () => {
           </>
         )}
       </main>
+      </div>
     </div>
   );
 };

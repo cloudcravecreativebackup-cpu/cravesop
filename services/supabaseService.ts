@@ -140,6 +140,10 @@ export const supabaseService = {
     });
     if (error) throw error;
   },
+  async deleteService(id: string) {
+    const { error } = await supabase.from('services').delete().eq('id', id);
+    if (error) throw error;
+  },
 
   // Calendars
   async getCalendars(): Promise<ContentCalendar[]> {

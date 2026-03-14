@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import Logo from './Logo';
+import { Logo } from './Logo';
 
 interface AuthProps {
   onLogin: (email: string, password?: string) => void;

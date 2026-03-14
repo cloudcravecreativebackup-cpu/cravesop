@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-const Logo: React.FC<{ className?: string }> = ({ className = "h-10" }) => {
+export const Logo: React.FC<{ className?: string }> = ({ className = "h-10" }) => {
   return (
     <div className={`flex items-center gap-3 select-none ${className}`}>
       {/* 
@@ -61,4 +61,4 @@ const Logo: React.FC<{ className?: string }> = ({ className = "h-10" }) => {
   );
 };
 
-export default Logo;
+

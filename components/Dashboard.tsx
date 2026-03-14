@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ManagementSummary, User } from '../types';
+import { ManagementSummary, User, Organization } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 import { motion } from 'motion/react';
 import { 
@@ -15,7 +15,8 @@ import {
   BarChart3,
   CheckCircle2,
   AlertTriangle,
-  Users
+  Users,
+  Hash
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -27,9 +28,10 @@ function cn(...inputs: ClassValue[]) {
 interface DashboardProps {
   summary: ManagementSummary;
   users: User[];
+  organization: Organization;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ summary, users }) => {
+const Dashboard: React.FC<DashboardProps> = ({ summary, users, organization }) => {
   const chartData = summary.staffWorkload.map(s => ({
     name: s.staffName,
     hours: s.totalHours,
@@ -67,6 +69,23 @@ const Dashboard: React.FC<DashboardProps> = ({ summary, users }) => {
       animate="visible"
       className="space-y-12 pb-24"
     >
+      {/* Dashboard Header with Tenant Info */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-none">Intelligence Dashboard</h2>
+          <p className="text-slate-500 dark:text-slate-400 font-medium text-lg mt-3">Synthesized operational logs and tactical performance metrics.</p>
+        </div>
+        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 px-6 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-soft">
+          <div className="p-2 bg-brand-blue/10 rounded-lg">
+            <Hash className="w-4 h-4 text-brand-blue" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tenant Code</p>
+            <p className="text-sm font-mono font-bold text-slate-900 dark:text-white">{organization.tenantId}</p>
+          </div>
+        </div>
+      </div>
+
       {/* High-Impact Analytics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
         {[
