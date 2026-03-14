@@ -67,7 +67,7 @@ const PersonnelProtocolView: React.FC<PersonnelProtocolViewProps> = ({ userId, u
           </button>
           <div className="flex items-center gap-6">
             <div className="w-20 h-20 rounded-3xl bg-slate-100 dark:bg-slate-800 overflow-hidden shadow-hard">
-               <img src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} className="w-full h-full object-cover" />
+               <img src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             </div>
             <div>
               <h2 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight">{user.name}</h2>
@@ -83,7 +83,7 @@ const PersonnelProtocolView: React.FC<PersonnelProtocolViewProps> = ({ userId, u
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 w-full md:w-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full md:w-auto">
            {[
              { label: 'Logged Effort', val: `${totalHours}h`, color: 'text-brand-blue' },
              { label: 'Scoped Units', val: filteredTasks.length, color: 'text-brand-cyan' },

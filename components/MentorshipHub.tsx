@@ -56,7 +56,7 @@ const MentorshipHub: React.FC<MentorshipHubProps> = ({ users, tasks, currentUser
             >
               <div className="flex items-center gap-6 mb-10 relative z-10">
                 <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex-shrink-0 overflow-hidden">
-                  <img src={recruit.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${recruit.name}`} alt="avatar" className="w-full h-full object-cover" />
+                  <img src={recruit.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${recruit.name}`} alt="avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
                 <div>
                   <h3 className="text-xl font-black text-slate-800 dark:text-white truncate max-w-[150px]">{recruit.name}</h3>

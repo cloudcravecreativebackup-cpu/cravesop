@@ -206,7 +206,7 @@ const BrandManagement: React.FC<BrandManagementProps> = ({ brands, services, wor
                <div className="flex -space-x-3">
                  {[1,2,3].map(i => (
                    <div key={i} className="w-8 h-8 rounded-full border-4 border-white dark:border-slate-900 bg-slate-100 dark:bg-slate-800 overflow-hidden shadow-sm">
-                     <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${brand.name}${i}`} className="w-full h-full object-cover" />
+                     <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${brand.name}${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                    </div>
                  ))}
                </div>

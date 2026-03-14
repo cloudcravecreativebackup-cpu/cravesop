@@ -61,7 +61,7 @@ const AlertsPanel: React.FC<AlertsPanelProps> = ({ tasks, users, onEditTask }) =
             staffOverload.map(({ user, workload }) => (
               <div key={user.id} className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20">
                 <div className="flex items-center gap-3 mb-2">
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} className="w-6 h-6 rounded-lg" />
+                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} className="w-6 h-6 rounded-lg" referrerPolicy="no-referrer" />
                   <p className="text-xs font-black text-slate-800 dark:text-white">{user.name}</p>
                 </div>
                 <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">

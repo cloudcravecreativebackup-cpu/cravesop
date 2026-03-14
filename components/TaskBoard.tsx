@@ -18,6 +18,7 @@ interface TaskBoardProps {
 }
 
 type BoardView = 'deliverables' | 'people' | 'brands' | 'performance' | 'reports';
+type BoardLayout = 'list' | 'kanban';
 type TimeRange = 'Today' | 'This Week' | 'This Month' | 'This Year' | 'All Time';
 
 const TaskBoard: React.FC<TaskBoardProps> = ({ 
@@ -28,6 +29,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const terminologyPlural = workspace.config.clientTerminologyPlural;
   
   const [view, setView] = useState<BoardView>('deliverables');
+  const [layout, setLayout] = useState<BoardLayout>('list');
   const [selectedBrandId, setSelectedBrandId] = useState<string | 'All'>('All');
   const [selectedService, setSelectedService] = useState<ServiceType | 'All'>('All');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'All'>('All');
@@ -209,7 +211,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
             <p className="text-slate-500 dark:text-slate-400 font-medium text-lg mt-3">Tactical monitoring of client brands and service deliverables.</p>
           </div>
           
-          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl">
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl overflow-x-auto no-scrollbar max-w-full">
             {(['deliverables', 'people', 'brands', 'performance', 'reports'] as BoardView[]).map((v) => (
               <button
                 key={v}
@@ -224,6 +226,28 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
               </button>
             ))}
           </div>
+
+          {view === 'deliverables' && (
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl overflow-x-auto no-scrollbar">
+              {(['list', 'kanban'] as BoardLayout[]).map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setLayout(l)}
+                  className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    layout === l 
+                      ? 'bg-white dark:bg-slate-700 text-brand-blue dark:text-brand-cyan shadow-sm' 
+                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {l === 'list' ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-3 p-6 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-white/5 shadow-soft">
@@ -315,242 +339,314 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
       <div className="flex gap-8">
         <div className="flex-grow space-y-12">
           {view === 'deliverables' && (
-        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-white/5 shadow-soft overflow-hidden overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1100px]">
-            <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-100 dark:border-white/5">
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Owner</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Client {terminology}</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Deliverable</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Service Stream</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Time Spent</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Status</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] text-right">Moderation</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-              {filteredTasks.map(task => {
-                const brand = brands.find(b => b.id === task.brandId);
-                const user = users.find(u => u.name === task.staffName);
-                const isExpanded = expandedTaskId === task.id;
-                const timeSpent = getTimeForRange(task, timeRange);
-                
-                return (
-                  <React.Fragment key={task.id}>
-                    <tr 
-                      ref={highlightTaskId === task.id ? highlightedTaskRef : null}
-                      onClick={() => {
-                        setExpandedTaskId(isExpanded ? null : task.id);
-                        setIsInputActive(false);
-                      }}
-                      className={`group hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all cursor-pointer ${isExpanded ? 'bg-slate-50/30 dark:bg-white/5' : ''} ${highlightTaskId === task.id ? 'ring-2 ring-brand-blue ring-inset' : ''}`}
-                    >
-                      <td className="px-8 py-6">
-                        <div className="flex items-center gap-4">
-                          <img src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${task.staffName}`} className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm object-cover" />
-                          <div>
-                            <p className="text-xs font-black text-slate-800 dark:text-white leading-none">{task.staffName}</p>
-                            <span className={`inline-block text-[7px] font-black uppercase px-2 py-0.5 rounded border mt-1.5 ${getRoleColor(user?.role || 'Member')}`}>
-                              {user?.role || 'Member'}
+            <>
+              {/* Mobile Card View */}
+              <div className="lg:hidden space-y-6">
+                {filteredTasks.length === 0 ? (
+                  <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-12 text-center border border-slate-200 dark:border-white/5 shadow-soft">
+                    <p className="text-slate-400 font-black uppercase tracking-widest text-xs">No deliverables found matching your filters.</p>
+                  </div>
+                ) : (
+                  filteredTasks.map(task => {
+                    const brand = brands.find(b => b.id === task.brandId);
+                    const user = users.find(u => u.name === task.staffName);
+                    const isExpanded = expandedTaskId === task.id;
+                    const timeSpent = getTimeForRange(task, timeRange);
+                    
+                    return (
+                      <div 
+                        key={task.id} 
+                        onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
+                        className={`bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-white/5 shadow-soft overflow-hidden transition-all ${isExpanded ? 'ring-2 ring-brand-blue' : ''}`}
+                      >
+                        <div className="p-6">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-3">
+                              <img src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${task.staffName}`} className="w-10 h-10 rounded-xl border border-slate-100 dark:border-slate-800" referrerPolicy="no-referrer" />
+                              <div>
+                                <p className="text-xs font-black text-slate-800 dark:text-white leading-none">{task.staffName}</p>
+                                <span className={`inline-block text-[7px] font-black uppercase px-2 py-0.5 rounded border mt-1 ${getRoleColor(user?.role || 'Member')}`}>
+                                  {user?.role || 'Member'}
+                                </span>
+                              </div>
+                            </div>
+                            <span className={`text-[8px] font-black uppercase px-3 py-1.5 rounded-lg border-2 ${getStatusColor(task.status)}`}>
+                              {task.status}
                             </span>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-8 py-6">
-                        <p className="text-[10px] font-black text-brand-blue dark:text-brand-cyan uppercase tracking-widest">{brand?.name || 'Internal'}</p>
-                      </td>
-                      <td className="px-8 py-6 font-black text-slate-800 dark:text-white text-sm">{task.taskTitle}</td>
-                      <td className="px-8 py-6">
-                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{task.serviceType}</span>
-                      </td>
-                      <td className="px-8 py-6">
-                         <span className="text-xs font-black text-slate-700 dark:text-slate-300">{Math.floor(timeSpent / 60)}h {timeSpent % 60}m</span>
-                      </td>
-                      <td className="px-8 py-6">
-                        <span className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border-2 ${getStatusColor(task.status)}`}>
-                          {task.status}
-                        </span>
-                      </td>
-                      <td className="px-8 py-6 text-right">
-                         <div className="flex justify-end gap-2">
-                          <button onClick={(e) => { e.stopPropagation(); onEditTask(task); }} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-400 hover:text-brand-blue transition-colors">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                          </button>
-                          <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-400">
-                            <svg className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+                          
+                          <h4 className="text-sm font-black text-slate-800 dark:text-white mb-2">{task.taskTitle}</h4>
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-50 dark:border-white/5">
+                            <p className="text-[9px] font-black text-brand-blue dark:text-brand-cyan uppercase tracking-widest">{brand?.name || 'Internal'}</p>
+                            <span className="text-[10px] font-black text-slate-500">{Math.floor(timeSpent / 60)}h {timeSpent % 60}m</span>
                           </div>
-                         </div>
-                      </td>
-                    </tr>
-                    {isExpanded && (
-                      <tr className="bg-slate-50/50 dark:bg-slate-800/20 animate-in slide-in-from-top-2 duration-300">
-                        <td colSpan={7} className="px-12 py-10">
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                            <div>
-                              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-brand-blue"></span>
-                                Deliverable Details
-                              </h4>
-                              <p className="text-base text-slate-700 dark:text-slate-300 leading-relaxed font-medium bg-white dark:bg-slate-900/50 p-8 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm">{task.taskDescription}</p>
-                              
-                              <div className="mt-8 flex gap-6">
-                                <div className="flex flex-col">
-                                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Estimated</span>
-                                  <span className="text-xl font-black text-slate-800 dark:text-white">{task.estimatedHours}h</span>
-                                </div>
-                                <div className="flex flex-col">
-                                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Logged</span>
-                                  <span className="text-xl font-black text-brand-blue">{task.hoursSpent}h</span>
-                                </div>
-                              </div>
+                        </div>
 
-                              {(currentUser.role === 'Admin' || currentUser.role === 'Staff Lead') && task.status === 'Pending Approval' && (
-                                <div className="mt-10 p-8 bg-blue-50 dark:bg-blue-900/20 rounded-[2rem] border border-blue-100 dark:border-blue-800 animate-in zoom-in-95 duration-300">
-                                  <h5 className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-4">Approval Protocol Required</h5>
-                                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-6">This deliverable has been submitted for final verification. Review the logs and output before committing to completion.</p>
-                                  <div className="flex gap-4">
-                                    <button 
-                                      onClick={(e) => { e.stopPropagation(); onUpdateTaskStatus(task.id, 'Completed'); }}
-                                      className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all active:scale-95"
-                                    >
-                                      Approve Completion
-                                    </button>
-                                    <button 
-                                      onClick={(e) => { 
-                                        e.stopPropagation(); 
-                                        const feedback = prompt("Enter rejection feedback:");
-                                        if (feedback !== null) onUpdateTaskStatus(task.id, 'Rejected', feedback); 
-                                      }}
-                                      className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all active:scale-95"
-                                    >
-                                      Reject & Request Fix
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {task.staffName === currentUser.name && (task.status === 'In Progress' || task.status === 'Rejected' || task.status === 'Not Started') && (
-                                <div className="mt-10">
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); onUpdateTaskStatus(task.id, 'Pending Approval'); }}
-                                    className="w-full py-4 bg-brand-blue hover:bg-blue-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg transition-all active:scale-95"
-                                  >
-                                    Submit for Approval
-                                  </button>
-                                </div>
-                              )}
+                        {isExpanded && (
+                          <div className="px-6 pb-6 pt-2 bg-slate-50/50 dark:bg-white/5 animate-in slide-in-from-top-2">
+                            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium mb-6">{task.taskDescription}</p>
+                            <div className="flex gap-4">
+                              <button onClick={(e) => { e.stopPropagation(); onEditTask(task); }} className="flex-grow py-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400">Edit Task</button>
+                              <button onClick={(e) => { e.stopPropagation(); handleStartComment(task.id); }} className="flex-grow py-3 bg-brand-blue text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Comment</button>
                             </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
 
-                            <div className="space-y-6 flex flex-col">
-                              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                                <span className="flex items-center gap-2">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-brand-cyan"></span>
-                                  Inference Logs
-                                </span>
-                                {!isInputActive && (
-                                  <button 
-                                    onClick={() => handleStartComment(task.id)}
-                                    className="text-[9px] font-black text-brand-blue dark:text-brand-cyan uppercase tracking-widest bg-brand-blue/5 dark:bg-brand-cyan/10 px-3 py-1.5 rounded-lg hover:bg-brand-blue hover:text-white transition-all"
-                                  >
-                                    + Add Log
-                                  </button>
-                                )}
-                              </h4>
-                              
-                              <div className="flex-grow space-y-4 max-h-[400px] overflow-y-auto pr-3 scrollbar-hide custom-scrollbar">
-                                {task.comments.length === 0 ? (
-                                  <div className="py-12 text-center bg-white/50 dark:bg-slate-900/30 rounded-[2rem] border border-dashed border-slate-200 dark:border-slate-800">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No operational logs recorded.</p>
+              {/* Desktop View */}
+              <div className="hidden lg:block">
+                {layout === 'list' ? (
+                  <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-white/5 shadow-soft overflow-hidden overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[1100px]">
+                      <thead>
+                        <tr className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-100 dark:border-white/5">
+                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Owner</th>
+                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Client {terminology}</th>
+                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Deliverable</th>
+                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Service Stream</th>
+                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Time Spent</th>
+                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Status</th>
+                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] text-right">Moderation</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                        {filteredTasks.map(task => {
+                          const brand = brands.find(b => b.id === task.brandId);
+                          const user = users.find(u => u.name === task.staffName);
+                          const isExpanded = expandedTaskId === task.id;
+                          const timeSpent = getTimeForRange(task, timeRange);
+                          
+                          return (
+                            <React.Fragment key={task.id}>
+                              <tr 
+                                ref={highlightTaskId === task.id ? highlightedTaskRef : null}
+                                onClick={() => {
+                                  setExpandedTaskId(isExpanded ? null : task.id);
+                                  setIsInputActive(false);
+                                }}
+                                className={`group hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all cursor-pointer ${isExpanded ? 'bg-slate-50/30 dark:bg-white/5' : ''} ${highlightTaskId === task.id ? 'ring-2 ring-brand-blue ring-inset' : ''}`}
+                              >
+                                <td className="px-8 py-6">
+                                  <div className="flex items-center gap-4">
+                                    <img src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${task.staffName}`} className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm object-cover" referrerPolicy="no-referrer" />
+                                    <div>
+                                      <p className="text-xs font-black text-slate-800 dark:text-white leading-none">{task.staffName}</p>
+                                      <span className={`inline-block text-[7px] font-black uppercase px-2 py-0.5 rounded border mt-1.5 ${getRoleColor(user?.role || 'Member')}`}>
+                                        {user?.role || 'Member'}
+                                      </span>
+                                    </div>
                                   </div>
-                                ) : (
-                                  task.comments.map(c => (
-                                    <div key={c.id} className="p-6 rounded-2xl border border-slate-100 dark:border-white/5 bg-white dark:bg-slate-900 shadow-sm relative group/comment">
-                                      <div className="flex justify-between items-center mb-3">
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[8px] font-black text-slate-500 overflow-hidden">
-                                            <img src={users.find(u => u.name === c.authorName)?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.authorName}`} alt="" className="w-full h-full object-cover" />
+                                </td>
+                                <td className="px-8 py-6">
+                                  <p className="text-[10px] font-black text-brand-blue dark:text-brand-cyan uppercase tracking-widest">{brand?.name || 'Internal'}</p>
+                                </td>
+                                <td className="px-8 py-6 font-black text-slate-800 dark:text-white text-sm">{task.taskTitle}</td>
+                                <td className="px-8 py-6">
+                                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{task.serviceType}</span>
+                                </td>
+                                <td className="px-8 py-6">
+                                   <span className="text-xs font-black text-slate-700 dark:text-slate-300">{Math.floor(timeSpent / 60)}h {timeSpent % 60}m</span>
+                                </td>
+                                <td className="px-8 py-6">
+                                  <span className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border-2 ${getStatusColor(task.status)}`}>
+                                    {task.status}
+                                  </span>
+                                </td>
+                                <td className="px-8 py-6 text-right">
+                                   <div className="flex justify-end gap-2">
+                                    <button onClick={(e) => { e.stopPropagation(); onEditTask(task); }} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-400 hover:text-brand-blue transition-colors">
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                    </button>
+                                    <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-400">
+                                      <svg className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+                                    </div>
+                                   </div>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr className="bg-slate-50/50 dark:bg-slate-800/20 animate-in slide-in-from-top-2 duration-300">
+                                  <td colSpan={7} className="px-12 py-10">
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                                      <div>
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-brand-blue"></span>
+                                          Deliverable Details
+                                        </h4>
+                                        <p className="text-base text-slate-700 dark:text-slate-300 leading-relaxed font-medium bg-white dark:bg-slate-900/50 p-8 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm">{task.taskDescription}</p>
+                                        
+                                        <div className="mt-8 flex gap-6">
+                                          <div className="flex flex-col">
+                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Estimated</span>
+                                            <span className="text-xl font-black text-slate-800 dark:text-white">{task.estimatedHours}h</span>
                                           </div>
-                                          <div>
-                                            <span className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-tighter">{c.authorName}</span>
-                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-2">{c.authorRole}</span>
+                                          <div className="flex flex-col">
+                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Spent</span>
+                                            <span className="text-xl font-black text-brand-blue dark:text-brand-cyan">{task.hoursSpent}h</span>
+                                          </div>
+                                          <div className="flex flex-col">
+                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Due Date</span>
+                                            <span className="text-xl font-black text-slate-800 dark:text-white">{new Date(task.dueDate).toLocaleDateString()}</span>
                                           </div>
                                         </div>
-                                        <span className="text-[8px] font-bold text-slate-400/50 uppercase tracking-widest">{new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                       </div>
-                                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{c.text}</p>
-                                      
-                                      <button 
-                                        onClick={() => handleStartComment(task.id, c.authorName)}
-                                        className="mt-3 opacity-0 group-hover/comment:opacity-100 text-[8px] font-black text-brand-blue uppercase tracking-widest transition-all hover:underline"
-                                      >
-                                        Reply
-                                      </button>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
 
-                              {isInputActive && (
-                                <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border-2 border-brand-blue/20 shadow-hard animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-brand-blue animate-pulse"></span>
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                      {replyToName ? `Replying to ${replyToName}` : 'New Operational Entry'}
-                                    </span>
+                                      <div className="space-y-6 flex flex-col">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                                          <span className="flex items-center gap-2">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-brand-cyan"></span>
+                                            Inference Logs
+                                          </span>
+                                          {!isInputActive && (
+                                            <button 
+                                              onClick={() => handleStartComment(task.id)}
+                                              className="text-[9px] font-black text-brand-blue dark:text-brand-cyan uppercase tracking-widest bg-brand-blue/5 dark:bg-brand-cyan/10 px-3 py-1.5 rounded-lg hover:bg-brand-blue hover:text-white transition-all"
+                                            >
+                                              + Add Log
+                                            </button>
+                                          )}
+                                        </h4>
+                                        
+                                        <div className="flex-grow space-y-4 max-h-[400px] overflow-y-auto pr-3 scrollbar-hide custom-scrollbar">
+                                          {task.comments.length === 0 ? (
+                                            <div className="py-12 text-center bg-white/50 dark:bg-slate-900/30 rounded-[2rem] border border-dashed border-slate-200 dark:border-slate-800">
+                                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No operational logs recorded.</p>
+                                            </div>
+                                          ) : (
+                                            task.comments.map(c => (
+                                              <div key={c.id} className="p-6 rounded-2xl border border-slate-100 dark:border-white/5 bg-white dark:bg-slate-900 shadow-sm relative group/comment">
+                                                <div className="flex justify-between items-center mb-3">
+                                                  <div className="flex items-center gap-2">
+                                                    <div className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[8px] font-black text-slate-500 overflow-hidden">
+                                                      <img src={users.find(u => u.name === c.authorName)?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.authorName}`} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                    </div>
+                                                    <div>
+                                                      <span className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-tighter">{c.authorName}</span>
+                                                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-2">{c.authorRole}</span>
+                                                    </div>
+                                                  </div>
+                                                  <span className="text-[8px] font-bold text-slate-400/50 uppercase tracking-widest">{new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                </div>
+                                                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{c.text}</p>
+                                                
+                                                <button 
+                                                  onClick={() => handleStartComment(task.id, c.authorName)}
+                                                  className="mt-3 opacity-0 group-hover/comment:opacity-100 text-[8px] font-black text-brand-blue uppercase tracking-widest transition-all hover:underline"
+                                                >
+                                                  Reply
+                                                </button>
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>
+
+                                        {isInputActive && (
+                                          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border-2 border-brand-blue/20 shadow-hard animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                            <div className="flex items-center gap-2 mb-3">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-brand-blue animate-pulse"></span>
+                                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                {replyToName ? `Replying to ${replyToName}` : 'New Operational Entry'}
+                                              </span>
+                                            </div>
+                                            <input 
+                                              ref={inputRef}
+                                              className="w-full text-xs font-bold px-6 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border border-transparent focus:border-brand-blue/30 mb-4 transition-all"
+                                              placeholder="Log progress or reply to unit..."
+                                              value={commentText}
+                                              onChange={e => setCommentText(e.target.value)}
+                                              onKeyDown={e => {
+                                                if (e.key === 'Enter' && !e.shiftKey) {
+                                                  e.preventDefault();
+                                                  handlePostComment(task.id);
+                                                }
+                                                if (e.key === 'Escape') {
+                                                  handleCancelComment();
+                                                }
+                                              }}
+                                            />
+                                            <div className="flex justify-end gap-3">
+                                              <button 
+                                                onClick={handleCancelComment}
+                                                className="px-5 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600"
+                                              >
+                                                Cancel
+                                              </button>
+                                              <button 
+                                                onClick={() => handlePostComment(task.id)}
+                                                className="px-6 py-2.5 bg-brand-blue text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg shadow-brand-blue/20 active:scale-95 transition-all"
+                                              >
+                                                Commit Log
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {!isInputActive && task.comments.length > 0 && (
+                                          <button 
+                                            onClick={() => handleStartComment(task.id)}
+                                            className="w-full py-4 border-2 border-dashed border-slate-100 dark:border-white/5 rounded-2xl text-[9px] font-black text-slate-400 uppercase tracking-widest hover:border-brand-blue/20 hover:text-brand-blue transition-all"
+                                          >
+                                            + Add Another Log
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8 h-full min-h-[600px]">
+                    {(['Not Started', 'In Progress', 'Blocked', 'Completed'] as TaskStatus[]).map(status => {
+                      const statusTasks = filteredTasks.filter(t => t.status === status);
+                      return (
+                        <div key={status} className="flex flex-col gap-6">
+                          <div className="flex items-center justify-between px-4">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${getStatusColor(status).split(' ')[0].replace('bg-', 'bg-')}`}></span>
+                              {status}
+                            </h3>
+                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black px-2 py-0.5 rounded-lg">{statusTasks.length}</span>
+                          </div>
+                          <div className="flex-grow space-y-4 p-2 bg-slate-50/50 dark:bg-slate-800/20 rounded-[2rem] border border-slate-100 dark:border-white/5 min-h-[200px]">
+                            {statusTasks.map(task => {
+                              const brand = brands.find(b => b.id === task.brandId);
+                              const user = users.find(u => u.name === task.staffName);
+                              return (
+                                <div 
+                                  key={task.id}
+                                  onClick={() => { setExpandedTaskId(task.id); setView('deliverables'); setLayout('list'); }}
+                                  className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+                                >
+                                  <div className="flex justify-between items-start mb-4">
+                                    <p className="text-[8px] font-black text-brand-blue dark:text-brand-cyan uppercase tracking-widest">{brand?.name || 'Internal'}</p>
+                                    <img src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${task.staffName}`} className="w-6 h-6 rounded-lg border border-slate-100 dark:border-slate-800" referrerPolicy="no-referrer" />
                                   </div>
-                                  <input 
-                                    ref={inputRef}
-                                    className="w-full text-xs font-bold px-6 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border border-transparent focus:border-brand-blue/30 mb-4 transition-all"
-                                    placeholder="Log progress or reply to unit..."
-                                    value={commentText}
-                                    onChange={e => setCommentText(e.target.value)}
-                                    onKeyDown={e => {
-                                      if (e.key === 'Enter' && !e.shiftKey) {
-                                        e.preventDefault();
-                                        handlePostComment(task.id);
-                                      }
-                                      if (e.key === 'Escape') {
-                                        handleCancelComment();
-                                      }
-                                    }}
-                                  />
-                                  <div className="flex justify-end gap-3">
-                                    <button 
-                                      onClick={handleCancelComment}
-                                      className="px-5 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600"
-                                    >
-                                      Cancel
-                                    </button>
-                                    <button 
-                                      onClick={() => handlePostComment(task.id)}
-                                      className="px-6 py-2.5 bg-brand-blue text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg shadow-brand-blue/20 active:scale-95 transition-all"
-                                    >
-                                      Commit Log
-                                    </button>
+                                  <h4 className="text-xs font-black text-slate-800 dark:text-white mb-4 line-clamp-2">{task.taskTitle}</h4>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">{task.serviceType}</span>
+                                    <span className="text-[8px] font-black text-slate-500">{task.hoursSpent}h</span>
                                   </div>
                                 </div>
-                              )}
-
-                              {!isInputActive && task.comments.length > 0 && (
-                                <button 
-                                  onClick={() => handleStartComment(task.id)}
-                                  className="w-full py-4 border-2 border-dashed border-slate-100 dark:border-white/5 rounded-2xl text-[9px] font-black text-slate-400 uppercase tracking-widest hover:border-brand-blue/20 hover:text-brand-blue transition-all"
-                                >
-                                  + Add Another Log
-                                </button>
-                              )}
-                            </div>
+                              );
+                            })}
                           </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
       {(view === 'people' || view === 'brands') && (
         <div className="space-y-12">
@@ -575,7 +671,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                 <div className="px-10 py-8 border-b border-slate-100 dark:border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 bg-slate-50/30 dark:bg-slate-800/20">
                   <div className="flex items-center gap-6">
                     {view === 'people' && (
-                      <img src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${groupName}`} className="w-16 h-16 rounded-[1.5rem] border-2 border-white dark:border-slate-800 shadow-md object-cover" />
+                      <img src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${groupName}`} className="w-16 h-16 rounded-[1.5rem] border-2 border-white dark:border-slate-800 shadow-md object-cover" referrerPolicy="no-referrer" />
                     )}
                     <div>
                       <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">{groupName}</h3>

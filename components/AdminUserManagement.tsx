@@ -91,7 +91,7 @@ const AdminUserManagement: React.FC<AdminUserManagementProps> = ({
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-5">
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 overflow-hidden shadow-sm flex-shrink-0">
-                        <img src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} alt="avatar" />
+                        <img src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} alt="avatar" referrerPolicy="no-referrer" />
                       </div>
                       <div>
                         <p className="text-base font-black text-slate-800 dark:text-white leading-tight">{user.name}</p>

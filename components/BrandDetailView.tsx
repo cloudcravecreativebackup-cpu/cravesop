@@ -99,7 +99,7 @@ const BrandDetailView: React.FC<BrandDetailViewProps> = ({ brand, tasks, users, 
           <div className="space-y-4">
             {teamMembers.length > 0 ? teamMembers.map(member => (
               <div key={member.id} className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-white/5 shadow-sm flex items-center gap-4 group hover:border-brand-blue transition-all cursor-default">
-                <img src={member.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.name}`} className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 dark:border-slate-800 shadow-inner" />
+                <img src={member.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.name}`} className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 dark:border-slate-800 shadow-inner" referrerPolicy="no-referrer" />
                 <div className="overflow-hidden">
                   <p className="text-sm font-black text-slate-800 dark:text-white truncate">{member.name}</p>
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{member.role}</p>

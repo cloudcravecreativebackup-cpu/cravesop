@@ -49,7 +49,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onRegister, users, showRegSuccess,
         setIsLoading(false);
         return;
       }
-      const result = onRegister(name, email, password, undefined, tenantId);
+      const result = await onRegister(name, email, password, undefined, tenantId);
       if (result.error) setError(result.error);
     } else if (mode === 'provision') {
       if (!name || !email || !password || !companyName) {
@@ -57,7 +57,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onRegister, users, showRegSuccess,
         setIsLoading(false);
         return;
       }
-      const result = onRegister(name, email, password, companyName);
+      const result = await onRegister(name, email, password, companyName);
       if (result.error) setError(result.error);
     }
     setIsLoading(false);
@@ -80,7 +80,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onRegister, users, showRegSuccess,
           </div>
           
           <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-4 tracking-tight">
-            {provisionedTenantId ? 'Workspace Provisioned' : 'Access Logged'}
+            {provisionedTenantId ? 'Workspace Provisioned' : 'Welcome to the Team'}
           </h2>
           
           {provisionedTenantId ? (
@@ -121,9 +121,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onRegister, users, showRegSuccess,
               <p className="text-[10px] text-slate-400 font-medium italic">You are now registered as the **Admin** for this unit.</p>
             </div>
           ) : (
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed mb-10">
-              Registration sent. Your workspace administrator has been notified to authorize your unit access.
-            </p>
+            <div className="space-y-6">
+              <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                You have successfully joined the workspace. Your account is active and ready for operational deployment.
+              </p>
+            </div>
           )}
 
           <div className="mt-10">
@@ -131,7 +133,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onRegister, users, showRegSuccess,
               onClick={onBackToLogin}
               className="w-full bg-brand-blue hover:bg-blue-700 text-white font-black py-5 rounded-2xl shadow-xl transition-all transform active:scale-[0.98] text-[10px] uppercase tracking-widest"
             >
-              Return to Authenticate
+              {provisionedTenantId ? 'Initialize Session' : 'Enter Dashboard'}
             </button>
           </div>
         </div>

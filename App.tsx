@@ -1,5 +1,6 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import confetti from 'canvas-confetti';
 import { StaffTask, ManagementSummary, User, TaskComment, Notification, Organization, Brand, ServiceType, TaskCategory, Frequency, TaskType, TaskStatus, ContentCalendar, CalendarEntry, Service } from './types';
 import { MOCK_TASKS, USERS, ORGS, BRANDS, DEFAULT_SERVICES } from './constants';
 import { analyzeTasks } from './services/geminiService';
@@ -18,8 +19,9 @@ import NotificationAudit from './components/NotificationAudit';
 import MentorshipHub from './components/MentorshipHub';
 import PersonnelProtocolView from './components/PersonnelProtocolView';
 import ContentCalendarView from './components/ContentCalendarView';
+import ProfileSettings from './components/ProfileSettings';
 
-type AppView = 'board' | 'analysis' | 'users' | 'squad' | 'personnel-detail' | 'brands' | 'brand-detail' | 'calendar' | 'notification-audit';
+type AppView = 'board' | 'analysis' | 'users' | 'squad' | 'personnel-detail' | 'brands' | 'brand-detail' | 'calendar' | 'notification-audit' | 'profile';
 
 const STORAGE_KEY_ORGS = 'craveops_cloudcraves_orgs_v2';
 const STORAGE_KEY_USERS = 'craveops_cloudcraves_users_v2';
@@ -66,11 +68,15 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   const [showRegSuccess, setShowRegSuccess] = useState(false);
   const [newlyProvisionedTenantId, setNewlyProvisionedTenantId] = useState<string | null>(null);
+  const [pendingUser, setPendingUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
   const [supabaseError, setSupabaseError] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const [organizations, setOrganizations] = useState<Organization[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_ORGS);
@@ -355,13 +361,25 @@ const App: React.FC = () => {
 
   const visibleTasks = useMemo(() => {
     if (!currentUser) return [];
-    if (currentUser.role === 'Admin') return tenantTasks;
+    let baseTasks = tenantTasks;
     if (currentUser.role === 'Staff Lead') {
       const myTeamNames = new Set(tenantUsers.filter(u => u.mentorId === currentUser.id || u.id === currentUser.id).map(u => u.name));
-      return tenantTasks.filter(t => myTeamNames.has(t.staffName));
+      baseTasks = tenantTasks.filter(t => myTeamNames.has(t.staffName));
+    } else if (currentUser.role !== 'Admin') {
+      baseTasks = tenantTasks.filter(t => t.staffName === currentUser.name);
     }
-    return tenantTasks.filter(t => t.staffName === currentUser.name);
-  }, [tenantTasks, currentUser, tenantUsers]);
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return baseTasks.filter(t => 
+        t.taskTitle.toLowerCase().includes(q) || 
+        t.taskDescription.toLowerCase().includes(q) ||
+        t.staffName.toLowerCase().includes(q) ||
+        brands.find(b => b.id === t.brandId)?.name.toLowerCase().includes(q)
+      );
+    }
+    return baseTasks;
+  }, [tenantTasks, currentUser, tenantUsers, searchQuery, brands]);
 
   const tenantCalendars = useMemo(() => {
     if (!currentUser) return [];
@@ -488,6 +506,7 @@ const App: React.FC = () => {
     setEditingTask(null);
     setShowProfileModal(false);
     setShowNotifs(false);
+    setIsMobileMenuOpen(false);
     if (newView !== 'personnel-detail') setSelectedPersonnelId(null);
     if (newView !== 'brand-detail') setSelectedBrandDetailId(null);
     if (newView !== 'users') setHighlightUserId(null);
@@ -516,6 +535,8 @@ const App: React.FC = () => {
       }
       setCurrentUser(user);
       setIsLoggedIn(true);
+      setSuccessMessage(`Welcome back, ${user.name}!`);
+      setTimeout(() => setSuccessMessage(null), 3000);
     }
   };
 
@@ -609,9 +630,9 @@ const App: React.FC = () => {
       finalTenantId = foundOrg.tenantId;
     }
 
-    // UPDATED LOGIC: Workspace creator is always Admin.
+    // UPDATED LOGIC: Users joining via Tenant ID are approved immediately for better UX
     const role = (companyName || isWhitelisted) ? 'Admin' : 'Staff Member';
-    const registrationStatus = (role === 'Admin') ? 'approved' : 'pending';
+    const registrationStatus = 'approved';
     
     const newUser: User = { 
       id: newUserId, 
@@ -627,22 +648,35 @@ const App: React.FC = () => {
       await supabaseService.saveUser(newUser);
       setUsers(prev => [...prev, newUser]);
       
-      if (registrationStatus === 'pending') {
+      // If it's a new provision, show them the success screen with the Tenant ID
+      if (companyName) {
+        setNewlyProvisionedTenantId(finalTenantId);
+        setPendingUser(newUser);
+        setShowRegSuccess(true);
+        setSuccessMessage(`Workspace Provisioned Successfully!`);
+      } else {
+        // Case B: Joining an existing workspace
+        // Notify admins about the new member
         const targetOrgAdmins = users.filter(u => u.orgId === targetOrgId && (u.role === 'Admin' || u.role === 'Staff Lead'));
         for (const admin of targetOrgAdmins) {
-          await createNotification(admin.id, 'warning', `New Access Request: ${name} is waiting for authorization in your unit.`, undefined, newUser.id);
+          await createNotification(admin.id, 'info', `New Team Member: ${name} has joined your workspace unit.`, undefined, newUser.id);
         }
+        
+        setPendingUser(newUser);
         setShowRegSuccess(true);
-      } else {
-        // If it's a new provision, show them the success screen with the Tenant ID
-        if (companyName) {
-          setNewlyProvisionedTenantId(finalTenantId);
-          setShowRegSuccess(true);
-        } else {
-          setCurrentUser(newUser);
-          setIsLoggedIn(true);
-        }
+        setNewlyProvisionedTenantId(null);
+        setSuccessMessage(`Joined Workspace Successfully!`);
       }
+
+      // Trigger confetti for a premium feel
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#2563eb', '#06b6d4', '#10b981']
+      });
+
+      setTimeout(() => setSuccessMessage(null), 5000);
       
       return { tenantId: finalTenantId };
     } catch (err) {
@@ -1125,25 +1159,84 @@ const App: React.FC = () => {
 
   if (!isLoggedIn) {
     return (
-      <Auth 
-        onLogin={handleLogin} 
-        onRegister={handleRegister} 
-        users={users} 
-        showRegSuccess={showRegSuccess} 
-        provisionedTenantId={newlyProvisionedTenantId}
-        onBackToLogin={() => { setShowRegSuccess(false); setNewlyProvisionedTenantId(null); }} 
-      />
+      <>
+        {successMessage && (
+          <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-4 duration-500">
+            <div className="bg-emerald-600 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-500/50 backdrop-blur-md">
+              <div className="bg-white/20 p-1.5 rounded-full">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+              </div>
+              <p className="text-sm font-black tracking-wide uppercase">{successMessage}</p>
+            </div>
+          </div>
+        )}
+        <Auth 
+          onLogin={handleLogin} 
+          onRegister={handleRegister} 
+          users={users} 
+          showRegSuccess={showRegSuccess} 
+          provisionedTenantId={newlyProvisionedTenantId}
+          onBackToLogin={() => { 
+            if (pendingUser) {
+              setCurrentUser(pendingUser);
+              setIsLoggedIn(true);
+              setSuccessMessage(`Welcome back, ${pendingUser.name}!`);
+              setTimeout(() => setSuccessMessage(null), 5000);
+            }
+            setShowRegSuccess(false); 
+            setNewlyProvisionedTenantId(null); 
+            setPendingUser(null);
+          }} 
+        />
+      </>
     );
   }
 
   return (
     <div className="min-h-screen flex flex-col font-sans transition-colors duration-300">
+      {successMessage && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 duration-500">
+          <div className="bg-emerald-600 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-500/50 backdrop-blur-md">
+            <div className="bg-white/20 p-1.5 rounded-full">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+            </div>
+            <p className="text-sm font-black tracking-wide uppercase">{successMessage}</p>
+          </div>
+        </div>
+      )}
       <header className="bg-white/95 dark:bg-slate-950/95 backdrop-blur-lg border-b border-slate-200/50 dark:border-white/10 sticky top-0 z-[100] shadow-soft">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="lg:hidden p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-500"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {isMobileMenuOpen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                  )}
+                </svg>
+              </button>
               <Logo className="h-8 sm:h-10" />
               <div className="h-6 w-px bg-slate-200 dark:bg-white/10 hidden sm:block"></div>
+              
+              {/* Global Search */}
+              <div className="hidden md:flex items-center relative group">
+                <div className="absolute left-4 text-slate-400 group-focus-within:text-brand-blue transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                </div>
+                <input 
+                  type="text"
+                  placeholder="Search intelligence..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-slate-100 dark:bg-white/5 border border-transparent focus:border-brand-blue/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl pl-12 pr-6 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none transition-all w-64 focus:w-80"
+                />
+              </div>
+
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <span className="hidden sm:block text-[11px] font-black uppercase tracking-[0.2em] text-brand-blue dark:text-brand-cyan">{currentOrg?.name}</span>
@@ -1164,7 +1257,7 @@ const App: React.FC = () => {
               </div>
             </div>
             
-            <nav className="hidden lg:flex items-center bg-slate-100 dark:bg-white/5 p-1 rounded-2xl border border-slate-200/50 dark:border-white/10">
+            <nav className="hidden lg:flex items-center bg-slate-100 dark:bg-white/5 p-1 rounded-2xl border border-slate-200/50 dark:border-white/10 overflow-x-auto no-scrollbar">
               <button onClick={() => navigateTo('board')} className={`px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 ${view === 'board' ? 'bg-white dark:bg-white/10 text-brand-blue shadow-sm' : 'text-slate-500'}`}>Deliverables Board</button>
               {(isAdminOrLead || currentUser?.role === 'Staff Member' || currentUser?.role === 'Mentee') && (
                 <button onClick={() => navigateTo('calendar')} className={`px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 ${view === 'calendar' ? 'bg-white dark:bg-white/10 text-brand-blue shadow-sm' : 'text-slate-500'}`}>Calendars</button>
@@ -1207,7 +1300,7 @@ const App: React.FC = () => {
 
               <div className="relative">
                 <div onClick={() => { setShowProfileModal(!showProfileModal); setShowNotifs(false); }} className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 border-2 border-transparent hover:border-brand-blue overflow-hidden cursor-pointer shadow-sm">
-                  <img src={currentUser?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`} className="w-full h-full object-cover" />
+                  <img src={currentUser?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
                 {showProfileModal && (
                   <div className="absolute right-0 mt-4 w-72 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden z-[200] animate-in zoom-in-95 duration-200 origin-top-right">
@@ -1216,6 +1309,7 @@ const App: React.FC = () => {
                         <img 
                           src={currentUser?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`} 
                           className="w-full h-full rounded-2xl object-cover border-2 border-slate-100 dark:border-white/10" 
+                          referrerPolicy="no-referrer"
                         />
                         <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -1244,6 +1338,13 @@ const App: React.FC = () => {
                       <p className="text-[9px] font-black text-brand-cyan uppercase tracking-widest mt-1">{currentUser?.role}</p>
                     </div>
                     <div className="p-4 space-y-2">
+                      <button 
+                        onClick={() => navigateTo('profile')}
+                        className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-600 dark:text-slate-400 transition-colors rounded-2xl text-left font-black text-[10px] uppercase tracking-widest"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                        Profile Settings
+                      </button>
                       {isAdminOrLead && (
                         <button 
                           onClick={() => navigateTo('notification-audit')}
@@ -1266,6 +1367,40 @@ const App: React.FC = () => {
         </div>
       </header>
 
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[150] lg:hidden animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
+          <div className="absolute left-0 top-0 bottom-0 w-80 bg-white dark:bg-slate-950 shadow-2xl p-8 animate-in slide-in-from-left duration-500">
+            <div className="flex items-center justify-between mb-12">
+              <Logo className="h-8" />
+              <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-slate-400">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            
+            <nav className="space-y-4">
+              <button onClick={() => navigateTo('board')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'board' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Deliverables Board</button>
+              {(isAdminOrLead || currentUser?.role === 'Staff Member' || currentUser?.role === 'Mentee') && (
+                <button onClick={() => navigateTo('calendar')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'calendar' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Calendars</button>
+              )}
+              {isAdminOrLead && (
+                <>
+                  <button onClick={() => navigateTo('brands')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'brands' || view === 'brand-detail' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Brands</button>
+                  <button onClick={() => navigateTo('squad')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'squad' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Squad Units</button>
+                  <button onClick={() => { navigateTo('analysis'); handleAnalyze(); }} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'analysis' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Intelligence</button>
+                  <button onClick={() => navigateTo('users')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'users' || view === 'personnel-detail' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Moderation</button>
+                </>
+              )}
+              <div className="pt-8 border-t border-slate-100 dark:border-white/5 mt-8">
+                <button onClick={() => navigateTo('profile')} className={`w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left transition-all ${view === 'profile' ? 'bg-brand-blue text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}>Profile Settings</button>
+                <button onClick={handleLogout} className="w-full px-6 py-4 text-xs font-black uppercase tracking-widest rounded-2xl text-left text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all">Logout Session</button>
+              </div>
+            </nav>
+          </div>
+        </div>
+      )}
+
       <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
         {(isAddingTask || editingTask) ? (
           <TaskEntryForm 
@@ -1282,6 +1417,7 @@ const App: React.FC = () => {
           <>
             {view === 'board' && <TaskBoard tasks={visibleTasks} users={tenantUsers} brands={tenantBrands} workspace={currentOrg!} currentUser={currentUser!} onEditTask={setEditingTask} onAddComment={handleAddComment} onUpdateTaskStatus={handleUpdateTaskStatus} highlightTaskId={highlightTaskId} onHighlightClear={() => setHighlightTaskId(null)} />}
             {view === 'calendar' && <ContentCalendarView currentUser={currentUser!} users={tenantUsers} brands={tenantBrands} calendars={tenantCalendars} onSaveCalendar={handleSaveCalendar} />}
+            {view === 'profile' && <ProfileSettings currentUser={currentUser!} onUpdateUser={handleUpdateUser} onBack={() => navigateTo('board')} />}
             {view === 'brands' && isAdminOrLead && <BrandManagement brands={tenantBrands} services={tenantServices} workspace={currentOrg!} onCreateBrand={handleCreateBrand} onUpdateBrand={handleUpdateBrand} onBrandClick={handleBrandDrillDown} />}
             {view === 'brand-detail' && selectedBrandDetailId && (
               <BrandDetailView 

@@ -102,7 +102,7 @@ const NotificationAudit: React.FC<NotificationAuditProps> = ({ notifications, us
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden shadow-sm">
-                          <img src={recipient?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${recipient?.name || n.userId}`} alt="avatar" />
+                          <img src={recipient?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${recipient?.name || n.userId}`} alt="avatar" referrerPolicy="no-referrer" />
                         </div>
                         <div>
                           <p className="text-sm font-black text-slate-800 dark:text-white">{recipient?.name || 'Unknown User'}</p>
