@@ -25,8 +25,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   tasks, users, brands, workspace, currentUser, onEditTask, onAddComment, onUpdateTaskStatus,
   highlightTaskId, onHighlightClear
 }) => {
-  const terminology = workspace.config.clientTerminology;
-  const terminologyPlural = workspace.config.clientTerminologyPlural;
+  const terminology = workspace.config?.clientTerminology || 'Brand';
+  const terminologyPlural = workspace.config?.clientTerminologyPlural || 'Brands';
   
   const [view, setView] = useState<BoardView>('deliverables');
   const [layout, setLayout] = useState<BoardLayout>('list');
@@ -208,7 +208,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
           <div>
             <h2 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight leading-none">Deliverables Queue</h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium text-lg mt-3">Tactical monitoring of client brands and service deliverables.</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium text-lg mt-3">Tactical monitoring of {terminologyPlural.toLowerCase()} and service deliverables.</p>
           </div>
           
           <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl overflow-x-auto no-scrollbar max-w-full">
@@ -222,7 +222,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                     : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
                 }`}
               >
-                {v}
+                {v === 'brands' ? terminologyPlural : v}
               </button>
             ))}
           </div>
@@ -328,7 +328,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                 className="px-4 py-2.5 rounded-xl text-[10px] font-black uppercase bg-brand-blue/5 text-brand-blue border border-brand-blue/10 outline-none"
               >
                 <option value="Per Person">Per Person</option>
-                <option value="Per Brand">Per Brand</option>
+                <option value="Per Brand">Per {terminology}</option>
                 <option value="Per Service">Per Service</option>
               </select>
             </div>
@@ -714,7 +714,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                     <thead>
                       <tr className="bg-slate-50/50 dark:bg-slate-800/10 border-b border-slate-100 dark:border-white/5">
                         <th className="px-10 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Deliverable</th>
-                        <th className="px-10 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">{view === 'people' ? 'Brand' : 'Owner'}</th>
+                        <th className="px-10 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">{view === 'people' ? terminology : 'Owner'}</th>
                         <th className="px-10 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Service</th>
                         <th className="px-10 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                         <th className="px-10 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Time</th>
@@ -753,6 +753,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
               brands={brands} 
               users={users} 
               timeRange={timeRange} 
+              workspace={workspace}
             />
           )}
 

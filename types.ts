@@ -28,11 +28,11 @@ export interface Organization {
   slug: string;
   createdAt: string;
   tenantId: string;
-  logoUrl?: string;
-  primaryColor?: string;
   config: {
     clientTerminology: string; // e.g., 'Brand', 'Account', 'Project'
     clientTerminologyPlural: string; // e.g., 'Brands', 'Accounts', 'Projects'
+    logoUrl?: string;
+    primaryColor?: string;
   };
 }
 

@@ -31,7 +31,10 @@ const AdminUserManagement: React.FC<AdminUserManagementProps> = ({
   const isAdmin = currentUser.role === 'Admin';
   const [isEditingOrg, setIsEditingOrg] = React.useState(false);
   const [orgName, setOrgName] = React.useState(organization.name);
-  const [orgLogo, setOrgLogo] = React.useState(organization.logoUrl || '');
+  const [orgLogo, setOrgLogo] = React.useState(organization.config?.logoUrl || '');
+  const [clientTerm, setClientTerm] = React.useState(organization.config?.clientTerminology || 'Brand');
+  const [clientTermPlural, setClientTermPlural] = React.useState(organization.config?.clientTerminologyPlural || 'Brands');
+  const [saveStatus, setSaveStatus] = React.useState<'idle' | 'saving' | 'success'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,10 +53,22 @@ const AdminUserManagement: React.FC<AdminUserManagementProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleOrgSubmit = (e: React.FormEvent) => {
+  const handleOrgSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateOrg({ name: orgName, logoUrl: orgLogo });
-    setIsEditingOrg(false);
+    setSaveStatus('saving');
+    try {
+      await onUpdateOrg({ 
+        name: orgName, 
+        logoUrl: orgLogo,
+        clientTerminology: clientTerm,
+        clientTerminologyPlural: clientTermPlural
+      });
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } catch (err) {
+      setSaveStatus('idle');
+      alert('Failed to save branding changes.');
+    }
   };
   const leads = users.filter(u => u.role === 'Staff Lead' && u.registrationStatus === 'approved');
 
@@ -145,12 +160,38 @@ const AdminUserManagement: React.FC<AdminUserManagementProps> = ({
                     </div>
                   </div>
                 </div>
-                <div className="md:col-span-2 flex justify-end">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Client Label (Singular)</label>
+                  <input 
+                    type="text" 
+                    value={clientTerm}
+                    onChange={e => setClientTerm(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-brand-blue"
+                    placeholder="e.g. Brand, Client, Case"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Client Label (Plural)</label>
+                  <input 
+                    type="text" 
+                    value={clientTermPlural}
+                    onChange={e => setClientTermPlural(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-brand-blue"
+                    placeholder="e.g. Brands, Clients, Cases"
+                  />
+                </div>
+                <div className="md:col-span-2 flex items-center justify-between pt-4">
+                  {saveStatus === 'success' && (
+                    <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest animate-in fade-in duration-300">
+                      ✓ Branding Updated Successfully
+                    </span>
+                  )}
                   <button 
                     type="submit"
-                    className="bg-brand-blue text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+                    disabled={saveStatus === 'saving'}
+                    className="bg-brand-blue text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all disabled:opacity-50 ml-auto"
                   >
-                    Save Changes
+                    {saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>

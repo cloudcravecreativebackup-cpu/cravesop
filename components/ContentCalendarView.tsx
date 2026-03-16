@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { User, Brand, ContentCalendar, CalendarEntry, ContentPlatform, ContentType } from '../types';
+import { User, Brand, ContentCalendar, CalendarEntry, ContentPlatform, ContentType, Organization } from '../types';
 import { GoogleGenAI } from "@google/genai";
 
 interface ContentCalendarViewProps {
@@ -8,10 +8,14 @@ interface ContentCalendarViewProps {
   users: User[];
   brands: Brand[];
   calendars: ContentCalendar[];
+  workspace: Organization;
   onSaveCalendar: (cal: ContentCalendar) => void;
 }
 
-const ContentCalendarView: React.FC<ContentCalendarViewProps> = ({ currentUser, users, brands, calendars, onSaveCalendar }) => {
+const ContentCalendarView: React.FC<ContentCalendarViewProps> = ({ currentUser, users, brands, calendars, workspace, onSaveCalendar }) => {
+  const terminology = workspace.config?.clientTerminology || 'Brand';
+  const terminologyPlural = workspace.config?.clientTerminologyPlural || 'Brands';
+
   const [selectedBrandId, setSelectedBrandId] = useState<string>(brands[0]?.id || '');
   const [isEditing, setIsEditing] = useState(false);
   const [currentCal, setCurrentCal] = useState<ContentCalendar | null>(null);
@@ -272,7 +276,7 @@ const ContentCalendarView: React.FC<ContentCalendarViewProps> = ({ currentUser, 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {activeCalendars.length === 0 ? (
           <div className="col-span-full py-40 text-center border-4 border-dashed border-slate-100 dark:border-white/5 rounded-[3rem]">
-            <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-xs">No active calendars for this brand.</p>
+            <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-xs">No active calendars for this {terminology.toLowerCase()}.</p>
           </div>
         ) : (
           activeCalendars.map(cal => (

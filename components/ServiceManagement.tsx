@@ -86,7 +86,7 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
       <div className="flex flex-col md:flex-row justify-between items-end gap-6">
         <div>
           <h2 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight leading-none">Service Modules</h2>
-          <p className="text-slate-500 dark:text-slate-400 font-medium text-lg mt-3">Define automated deliverable blueprints for your brands.</p>
+          <p className="text-slate-500 dark:text-slate-400 font-medium text-lg mt-3">Define automated deliverable blueprints for your {workspace.config?.clientTerminologyPlural?.toLowerCase() || 'brands'}.</p>
         </div>
         {!isAdding && !editingServiceId && (
           <button 

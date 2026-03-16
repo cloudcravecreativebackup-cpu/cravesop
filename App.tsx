@@ -253,7 +253,8 @@ const App: React.FC = () => {
         const newOrg = {
           ...payload.new,
           createdAt: payload.new.created_at,
-          tenantId: payload.new.tenant_id
+          tenantId: payload.new.tenant_id,
+          config: payload.new.config || { clientTerminology: 'Brand', clientTerminologyPlural: 'Brands' }
         };
         setOrganizations(prev => {
           const exists = prev.find(o => o.id === newOrg.id);
@@ -959,14 +960,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCreateBrand = async (brandName: string, selectedServices: ServiceType[]) => {
-    if (!currentUser) return;
+  const handleCreateBrand = async (brandName: string, selectedServices: string[], leadId?: string) => {
+    if (!currentUser || !currentOrg) return;
     const newBrand: Brand = {
       id: `b-${Math.random().toString(36).substr(2, 9)}`,
       orgId: currentUser.orgId,
       name: brandName,
       services: selectedServices,
-      leadId: currentUser.role === 'Staff Lead' ? currentUser.id : undefined
+      leadId: leadId || (currentUser.role === 'Staff Lead' ? currentUser.id : undefined)
     };
     
     try {
@@ -974,18 +975,20 @@ const App: React.FC = () => {
       setBrands(prev => [...prev, newBrand]);
 
       const autoTasks: StaffTask[] = [];
-      for (const service of selectedServices) {
-        const templates = SERVICE_TEMPLATES[service] || [];
+      for (const serviceName of selectedServices) {
+        const serviceDef = tenantServices.find(s => s.name === serviceName);
+        const templates = serviceDef?.templates || [];
+        
         for (const tpl of templates) {
           const newTask: StaffTask = {
             id: `t-${Math.random().toString(36).substr(2, 9)}`,
             orgId: currentUser.orgId,
             brandId: newBrand.id,
-            serviceType: service,
+            serviceType: serviceName,
             staffName: currentUser.name,
             assignedBy: currentUser.name,
             taskTitle: tpl.taskTitle,
-            taskDescription: `Automatic deliverable initialization for ${service}.`,
+            taskDescription: `Automatic deliverable initialization for ${serviceName}.`,
             category: tpl.category,
             type: tpl.type,
             frequency: tpl.frequency,
@@ -1002,7 +1005,7 @@ const App: React.FC = () => {
         }
       }
       setTasks(prev => [...autoTasks, ...prev]);
-      await notifyAdmins('success', `New brand pipeline provisioned: ${brandName}`);
+      await notifyAdmins('success', `New ${currentOrg.config.clientTerminology || 'brand'} pipeline provisioned: ${brandName}`);
     } catch (err) {
       console.error('Failed to create brand:', err);
     }
@@ -1010,7 +1013,7 @@ const App: React.FC = () => {
 
   const handleUpdateBrand = async (brandId: string, updates: Partial<Brand>) => {
     const oldBrand = brands.find(b => b.id === brandId);
-    if (!oldBrand || !currentUser) return;
+    if (!oldBrand || !currentUser || !currentOrg) return;
 
     const updatedBrand = { ...oldBrand, ...updates };
     
@@ -1022,18 +1025,20 @@ const App: React.FC = () => {
         const newServices = updates.services.filter(s => !oldBrand.services.includes(s));
         if (newServices.length > 0) {
           const autoTasks: StaffTask[] = [];
-          for (const service of newServices) {
-            const templates = SERVICE_TEMPLATES[service] || [];
+          for (const serviceName of newServices) {
+            const serviceDef = tenantServices.find(s => s.name === serviceName);
+            const templates = serviceDef?.templates || [];
+            
             for (const tpl of templates) {
               const newTask: StaffTask = {
                 id: `t-${Math.random().toString(36).substr(2, 9)}`,
                 orgId: currentUser.orgId,
                 brandId: brandId,
-                serviceType: service,
+                serviceType: serviceName,
                 staffName: currentUser.name,
                 assignedBy: currentUser.name,
                 taskTitle: tpl.taskTitle,
-                taskDescription: `Automatic deliverable initialization for ${service}.`,
+                taskDescription: `Automatic deliverable initialization for ${serviceName}.`,
                 category: tpl.category,
                 type: tpl.type,
                 frequency: tpl.frequency,
@@ -1052,7 +1057,7 @@ const App: React.FC = () => {
           setTasks(prev => [...autoTasks, ...prev]);
         }
       }
-      await notifyAdmins('info', `Brand configuration modified: ${brandId}`);
+      await notifyAdmins('info', `${currentOrg.config.clientTerminology || 'Brand'} configuration modified: ${brandId}`);
     } catch (err) {
       console.error('Failed to update brand:', err);
     }
@@ -1079,15 +1084,36 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateOrg = async (updates: Partial<Organization>) => {
+  const handleUpdateOrg = async (updates: Partial<Organization> & { 
+    logoUrl?: string; 
+    primaryColor?: string;
+    clientTerminology?: string;
+    clientTerminologyPlural?: string;
+  }) => {
     if (!currentOrg) return;
-    const updatedOrg = { ...currentOrg, ...updates };
+    
+    // Extract branding updates if they exist
+    const { logoUrl, primaryColor, clientTerminology, clientTerminologyPlural, ...directUpdates } = updates;
+    
+    const updatedOrg: Organization = { 
+      ...currentOrg, 
+      ...directUpdates,
+      config: {
+        ...currentOrg.config,
+        ...(logoUrl !== undefined ? { logoUrl } : {}),
+        ...(primaryColor !== undefined ? { primaryColor } : {}),
+        ...(clientTerminology !== undefined ? { clientTerminology } : {}),
+        ...(clientTerminologyPlural !== undefined ? { clientTerminologyPlural } : {})
+      }
+    };
+
     try {
       await supabaseService.saveOrganization(updatedOrg);
       setOrganizations(prev => prev.map(o => o.id === currentOrg.id ? updatedOrg : o));
       await notifyAdmins('success', `Workspace branding updated: ${updatedOrg.name}`);
     } catch (err) {
       console.error('Failed to update organization:', err);
+      throw err; // Re-throw so the UI can show the error
     }
   };
 
@@ -1372,7 +1398,7 @@ const App: React.FC = () => {
         ) : (
           <>
             {view === 'board' && <TaskBoard tasks={visibleTasks} users={tenantUsers} brands={tenantBrands} workspace={currentOrg!} currentUser={currentUser!} onEditTask={setEditingTask} onAddComment={handleAddComment} onUpdateTaskStatus={handleUpdateTaskStatus} highlightTaskId={highlightTaskId} onHighlightClear={() => setHighlightTaskId(null)} />}
-            {view === 'calendar' && <ContentCalendarView currentUser={currentUser!} users={tenantUsers} brands={tenantBrands} calendars={tenantCalendars} onSaveCalendar={handleSaveCalendar} />}
+            {view === 'calendar' && <ContentCalendarView currentUser={currentUser!} users={tenantUsers} brands={tenantBrands} calendars={tenantCalendars} workspace={currentOrg!} onSaveCalendar={handleSaveCalendar} />}
             {view === 'profile' && <ProfileSettings currentUser={currentUser!} onUpdateUser={handleUpdateUser} onBack={() => navigateTo('board')} />}
             {view === 'brands' && isAdminOrLead && <BrandManagement brands={tenantBrands} services={tenantServices} workspace={currentOrg!} onCreateBrand={handleCreateBrand} onUpdateBrand={handleUpdateBrand} onBrandClick={handleBrandDrillDown} />}
             {view === 'services' && isAdminOrLead && (

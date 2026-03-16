@@ -15,7 +15,7 @@ interface TaskEntryFormProps {
 }
 
 const TaskEntryForm: React.FC<TaskEntryFormProps> = ({ currentUser, users, brands, services, workspace, initialTask, onSubmit, onCancel }) => {
-  const terminology = workspace.config.clientTerminology;
+  const terminology = workspace.config?.clientTerminology || 'Brand';
   
   const [formData, setFormData] = useState({
     brandId: initialTask ? initialTask.brandId : (brands[0]?.id || ''),

@@ -10,8 +10,7 @@ export const supabaseService = {
       ...o,
       createdAt: o.created_at,
       tenantId: o.tenant_id,
-      logoUrl: o.logo_url,
-      primaryColor: o.primary_color
+      config: o.config || { clientTerminology: 'Brand', clientTerminologyPlural: 'Brands' }
     }));
   },
   async saveOrganization(org: Organization) {
@@ -21,8 +20,6 @@ export const supabaseService = {
       slug: org.slug,
       created_at: org.createdAt,
       tenant_id: org.tenantId,
-      logo_url: org.logoUrl,
-      primary_color: org.primaryColor,
       config: org.config
     });
     if (error) throw error;

@@ -12,8 +12,8 @@ interface BrandManagementProps {
 }
 
 const BrandManagement: React.FC<BrandManagementProps> = ({ brands, services, workspace, onCreateBrand, onUpdateBrand, onBrandClick }) => {
-  const terminology = workspace.config.clientTerminology;
-  const terminologyPlural = workspace.config.clientTerminologyPlural;
+  const terminology = workspace.config?.clientTerminology || 'Brand';
+  const terminologyPlural = workspace.config?.clientTerminologyPlural || 'Brands';
   
   const [isAdding, setIsAdding] = useState(false);
   const [editingBrandId, setEditingBrandId] = useState<string | null>(null);

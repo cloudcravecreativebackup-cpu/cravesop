@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { StaffTask, Brand, User } from '../types';
+import { StaffTask, Brand, User, Organization } from '../types';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, LineChart, Line, Legend 
@@ -10,11 +10,15 @@ interface PerformanceViewProps {
   brands: Brand[];
   users: User[];
   timeRange: string;
+  workspace: Organization;
 }
 
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
-const PerformanceView: React.FC<PerformanceViewProps> = ({ tasks, brands, users, timeRange }) => {
+const PerformanceView: React.FC<PerformanceViewProps> = ({ tasks, brands, users, timeRange, workspace }) => {
+  const terminology = workspace.config?.clientTerminology || 'Brand';
+  const terminologyPlural = workspace.config?.clientTerminologyPlural || 'Brands';
+
   const metrics = useMemo(() => {
     const total = tasks.length;
     const completed = tasks.filter(t => t.status === 'Completed').length;
@@ -91,7 +95,7 @@ const PerformanceView: React.FC<PerformanceViewProps> = ({ tasks, brands, users,
 
         {/* Tasks per Brand */}
         <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-white/5 shadow-soft">
-          <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest mb-8">Portfolio Allocation</h3>
+          <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest mb-8">{terminology} Portfolio Allocation</h3>
           <div className="h-[300px] flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>

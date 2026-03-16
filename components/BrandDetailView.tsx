@@ -14,8 +14,8 @@ interface BrandDetailViewProps {
 }
 
 const BrandDetailView: React.FC<BrandDetailViewProps> = ({ brand, tasks, users, workspace, onBack, onEditTask, onAddComment, currentUser }) => {
-  const terminology = workspace.config.clientTerminology;
-  const terminologyPlural = workspace.config.clientTerminologyPlural;
+  const terminology = workspace.config?.clientTerminology || 'Brand';
+  const terminologyPlural = workspace.config?.clientTerminologyPlural || 'Brands';
   
   // Enforce Scoping for Staff Leads
   const brandTasks = useMemo(() => {

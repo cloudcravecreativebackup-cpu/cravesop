@@ -97,14 +97,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside 
-      className={`h-screen sticky top-0 bg-[#09090b] border-r border-white/10 flex flex-col transition-all duration-300 ease-in-out z-[100] ${isCollapsed ? 'w-20' : 'w-72'}`}
+      className={`h-screen sticky top-0 bg-[#09090b] border-r border-white/10 flex flex-col transition-all duration-300 ease-in-out z-[150] ${isCollapsed ? 'w-20' : 'w-72'}`}
     >
       {/* Header */}
       <div className={`p-6 flex items-center gap-4 mb-4 relative ${isCollapsed ? 'justify-center' : ''}`}>
         <div className="w-10 h-10 bg-[#22c55e] rounded-xl flex items-center justify-center shadow-lg shadow-[#22c55e]/20 flex-shrink-0 overflow-hidden">
-          {currentOrg?.logoUrl ? (
+          {currentOrg?.config?.logoUrl ? (
             <img 
-              src={currentOrg.logoUrl} 
+              src={currentOrg.config.logoUrl} 
               alt={currentOrg.name} 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -128,13 +128,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
         
-        {/* Collapse Toggle */}
-        <button 
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="absolute -right-3 top-8 w-6 h-6 bg-[#27272a] border border-white/10 rounded-full flex items-center justify-center text-white/70 hover:text-white shadow-xl z-50 transition-transform hover:scale-110"
-        >
-          {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
-        </button>
+        {/* Collapse Toggle - Only show if setIsCollapsed is functional */}
+        {setIsCollapsed !== (() => {}) && (
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="absolute -right-3 top-8 w-6 h-6 bg-[#27272a] border border-white/10 rounded-full hidden lg:flex items-center justify-center text-white/70 hover:text-white shadow-xl z-50 transition-transform hover:scale-110"
+          >
+            {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+          </button>
+        )}
       </div>
 
       {/* Navigation Groups */}
@@ -173,7 +175,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <NavItem 
                   id="brands" 
                   icon={Briefcase} 
-                  label="Brands" 
+                  label={currentOrg?.config?.clientTerminologyPlural || 'Brands'} 
                   onClick={() => navigateTo('brands')} 
                   isActive={view === 'brands' || view === 'brand-detail'} 
                 />
